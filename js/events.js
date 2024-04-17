@@ -100,8 +100,8 @@ brapi.commands.onCommand.addListener(function(command) {
       .then(function(stateInfo) {
         switch (stateInfo.state) {
           case "PLAYING": return pause()
-          case "PAUSED": return resume()
-          case "STOPPED": return playTab()
+          case "PAUSED": return playClipboard()//resume()
+          case "STOPPED": return playClipboard()//playTab()
         }
       })
       .catch(handleHeadlessError)
@@ -120,6 +120,9 @@ brapi.commands.onCommand.addListener(function(command) {
   }
 })
 
+async function playClipboard(){
+  await sendToPlayer({method: "playClipboard"})
+}
 
 /**
  * Listener for external calls

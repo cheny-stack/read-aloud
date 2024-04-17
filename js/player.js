@@ -80,6 +80,7 @@ if (queryString.has("autoclose"))
 
 
 var messageHandlers = {
+  playClipboard: playClipboard,
   playText: playText,
   playTab: playTab,
   stop: stop,
@@ -103,7 +104,17 @@ bgPageInvoke("playerCheckIn")
 
 document.addEventListener("DOMContentLoaded", initialize)
 
-
+function playClipboard(){
+  let t = document.createElement("input");
+  document.body.appendChild(t);
+  t.focus();
+  document.execCommand("paste");
+  let clipboardText = t.value; //this is your clipboard data
+  console.log(clipboardText)
+  document.body.removeChild(t);
+  stop();
+  playText(clipboardText);
+}
 
 async function initialize() {
   setI18nText()
@@ -181,6 +192,7 @@ function resume() {
 }
 
 function getPlaybackState() {
+  console.log("getPlaybackState")
   if (activeDoc) {
     return Promise.all([activeDoc.getState(), activeDoc.getActiveSpeech()])
       .then(function(results) {
