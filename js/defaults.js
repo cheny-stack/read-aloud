@@ -5,7 +5,7 @@ polyfills();
 var config = {
   serviceUrl: "https://support.readaloud.app",
   webAppUrl: "https://readaloud.app",
-  pdfViewerUrl: "https://assets.lsdsoftware.com/read-aloud/page-scripts/pdf-upload.html",
+  pdfViewerUrl: "https://assets.lsdsoftware.com/read-aloud/pdf-viewer-2/web/readaloud.html",
   entityMap: {
     '&': '&amp;',
     '<': '&lt;',
@@ -22,186 +22,13 @@ var config = {
   unsupportedSites: [
     'https://chrome.google.com/webstore',
     'https://addons.mozilla.org',
+    'chrome:',
+    'about:',
   ],
   wavenetPerms: {
     permissions: ["webRequest"],
     origins: ["https://*/"]
   },
-  langList: [
-    {code: "ab", name: "аҧсуа бызшәа, аҧсшәа"},
-    {code: "aa", name: "Afaraf"},
-    {code: "af", name: "Afrikaans"},
-    {code: "ak", name: "Akan"},
-    {code: "sq", name: "Shqip"},
-    {code: "am", name: "አማርኛ"},
-    {code: "ar", name: "العربية"},
-    {code: "hy", name: "Հայերեն"},
-    {code: "as", name: "অসমীয়া"},
-    {code: "av", name: "авар мацӀ, магӀарул мацӀ"},
-    {code: "ae", name: "avesta"},
-    {code: "ay", name: "aymar aru"},
-    {code: "az", name: "azərbaycan dili, تۆرکجه"},
-    {code: "bm", name: "bamanankan"},
-    {code: "ba", name: "башҡорт теле"},
-    {code: "eu", name: "euskara, euskera"},
-    {code: "be", name: "беларуская мова"},
-    {code: "bn", name: "বাংলা"},
-    {code: "bi", name: "Bislama"},
-    {code: "bs", name: "bosanski jezik"},
-    {code: "br", name: "brezhoneg"},
-    {code: "bg", name: "български език"},
-    {code: "my", name: "ဗမာစာ"},
-    {code: "ca", name: "català, valencià"},
-    {code: "ch", name: "Chamoru"},
-    {code: "ce", name: "нохчийн мотт"},
-    {code: "ny", name: "chiCheŵa, chinyanja"},
-    {code: "zh", name: "中文 (Zhōngwén), 汉语, 漢語"},
-    {code: "cv", name: "чӑваш чӗлхи"},
-    {code: "kw", name: "Kernewek"},
-    {code: "co", name: "corsu, lingua corsa"},
-    {code: "cr", name: "ᓀᐦᐃᔭᐍᐏᐣ"},
-    {code: "hr", name: "hrvatski jezik"},
-    {code: "cs", name: "čeština, český jazyk"},
-    {code: "da", name: "dansk"},
-    {code: "dv", name: "ދިވެހި"},
-    {code: "nl", name: "Nederlands, Vlaams"},
-    {code: "dz", name: "རྫོང་ཁ"},
-    {code: "en", name: "English"},
-    {code: "et", name: "eesti, eesti keel"},
-    {code: "ee", name: "Eʋegbe"},
-    {code: "fo", name: "føroyskt"},
-    {code: "fj", name: "vosa Vakaviti"},
-    {code: "fi", name: "suomi, suomen kieli"},
-    {code: "fr", name: "français"},
-    {code: "ff", name: "Fulfulde, Pulaar, Pular"},
-    {code: "gl", name: "Galego"},
-    {code: "ka", name: "ქართული"},
-    {code: "de", name: "Deutsch"},
-    {code: "el", name: "ελληνικά"},
-    {code: "gn", name: "Avañe'ẽ"},
-    {code: "gu", name: "ગુજરાતી"},
-    {code: "ht", name: "Kreyòl ayisyen"},
-    {code: "ha", name: "(Hausa) هَوُسَ"},
-    {code: "he", name: "עברית"},
-    {code: "hz", name: "Otjiherero"},
-    {code: "hi", name: "हिन्दी, हिंदी"},
-    {code: "ho", name: "Hiri Motu"},
-    {code: "hu", name: "magyar"},
-    {code: "ia", name: "Interlingua"},
-    {code: "id", name: "Bahasa Indonesia"},
-    {code: "ga", name: "Gaeilge"},
-    {code: "ig", name: "Asụsụ Igbo"},
-    {code: "ik", name: "Iñupiaq, Iñupiatun"},
-    {code: "is", name: "Íslenska"},
-    {code: "it", name: "Italiano"},
-    {code: "iu", name: "ᐃᓄᒃᑎᑐᑦ"},
-    {code: "ja", name: "日本語 (にほんご)"},
-    {code: "jv", name: "ꦧꦱꦗꦮ, Basa Jawa"},
-    {code: "kl", name: "kalaallisut, kalaallit oqaasii"},
-    {code: "kn", name: "ಕನ್ನಡ"},
-    {code: "ks", name: "कश्मीरी, كشميري‎"},
-    {code: "kk", name: "қазақ тілі"},
-    {code: "km", name: "ខ្មែរ, ខេមរភាសា, ភាសាខ្មែរ"},
-    {code: "ki", name: "Gĩkũyũ"},
-    {code: "rw", name: "Ikinyarwanda"},
-    {code: "ky", name: "Кыргызча, Кыргыз тили"},
-    {code: "kv", name: "коми кыв"},
-    {code: "kg", name: "Kikongo"},
-    {code: "ko", name: "한국어"},
-    {code: "ku", name: "Kurdî, کوردی‎"},
-    {code: "kj", name: "Kuanyama"},
-    {code: "la", name: "latine, lingua latina"},
-    {code: "lb", name: "Lëtzebuergesch"},
-    {code: "lg", name: "Luganda"},
-    {code: "li", name: "Limburgs"},
-    {code: "ln", name: "Lingála"},
-    {code: "lo", name: "ພາສາລາວ"},
-    {code: "lt", name: "lietuvių kalba"},
-    {code: "lu", name: "Kiluba"},
-    {code: "lv", name: "latviešu valoda"},
-    {code: "gv", name: "Gaelg, Gailck"},
-    {code: "mk", name: "македонски јазик"},
-    {code: "mg", name: "fiteny malagasy"},
-    {code: "ms", name: "Bahasa Melayu, بهاس ملايو‎"},
-    {code: "ml", name: "മലയാളം"},
-    {code: "mt", name: "Malti"},
-    {code: "mi", name: "te reo Māori"},
-    {code: "mr", name: "मराठी"},
-    {code: "mh", name: "Kajin M̧ajeļ"},
-    {code: "mn", name: "Монгол хэл"},
-    {code: "na", name: "Dorerin Naoero"},
-    {code: "nv", name: "Diné bizaad"},
-    {code: "nd", name: "isiNdebele"},
-    {code: "ne", name: "नेपाली"},
-    {code: "ng", name: "Owambo"},
-    {code: "nb", name: "Norsk Bokmål"},
-    {code: "nn", name: "Norsk Nynorsk"},
-    {code: "no", name: "Norsk"},
-    {code: "ii", name: "ꆈꌠ꒿ Nuosuhxop"},
-    {code: "nr", name: "isiNdebele"},
-    {code: "oc", name: "occitan, lenga d'òc"},
-    {code: "cu", name: "ѩзыкъ словѣньскъ"},
-    {code: "om", name: "Afaan Oromoo"},
-    {code: "or", name: "ଓଡ଼ିଆ"},
-    {code: "os", name: "ирон ӕвзаг"},
-    {code: "pa", name: "ਪੰਜਾਬੀ, پنجابی‎"},
-    {code: "fa", name: "فارسی"},
-    {code: "pl", name: "język polski, polszczyzna"},
-    {code: "ps", name: "پښتو"},
-    {code: "pt", name: "Português"},
-    {code: "qu", name: "Runa Simi, Kichwa"},
-    {code: "rm", name: "Rumantsch Grischun"},
-    {code: "rn", name: "Ikirundi"},
-    {code: "ro", name: "Română, Moldovenească"},
-    {code: "ru", name: "русский"},
-    {code: "sa", name: "संस्कृतम्, 𑌸𑌂𑌸𑍍𑌕𑍃𑌤𑌮𑍍"},
-    {code: "sc", name: "sardu"},
-    {code: "sd", name: "सिन्धी, سنڌي، سندھی‎"},
-    {code: "se", name: "Davvisámegiella"},
-    {code: "sm", name: "gagana fa'a Samoa"},
-    {code: "sg", name: "yângâ tî sängö"},
-    {code: "sr", name: "српски језик"},
-    {code: "gd", name: "Gàidhlig"},
-    {code: "sn", name: "chiShona"},
-    {code: "si", name: "සිංහල"},
-    {code: "sk", name: "Slovenčina, Slovenský jazyk"},
-    {code: "sl", name: "Slovenski jezik, Slovenščina"},
-    {code: "so", name: "Soomaaliga, af Soomaali"},
-    {code: "st", name: "Sesotho"},
-    {code: "es", name: "Español"},
-    {code: "su", name: "Basa Sunda"},
-    {code: "sw", name: "Kiswahili"},
-    {code: "ss", name: "SiSwati"},
-    {code: "sv", name: "Svenska"},
-    {code: "ta", name: "தமிழ்"},
-    {code: "te", name: "తెలుగు"},
-    {code: "tg", name: "тоҷикӣ, toçikī, تاجیکی‎"},
-    {code: "th", name: "ไทย"},
-    {code: "ti", name: "ትግርኛ"},
-    {code: "bo", name: "བོད་ཡིག"},
-    {code: "tk", name: "Türkmen, Түркмен"},
-    {code: "tl", name: "Wikang Tagalog"},
-    {code: "tn", name: "Setswana"},
-    {code: "to", name: "Faka Tonga"},
-    {code: "tr", name: "Türkçe"},
-    {code: "ts", name: "Xitsonga"},
-    {code: "tt", name: "татар теле, tatar tele"},
-    {code: "ty", name: "Reo Tahiti"},
-    {code: "ug", name: "ئۇيغۇرچە‎, Uyghurche"},
-    {code: "uk", name: "Українська"},
-    {code: "ur", name: "اردو"},
-    {code: "uz", name: "Oʻzbek, Ўзбек, أۇزبېك‎"},
-    {code: "ve", name: "Tshivenḓa"},
-    {code: "vi", name: "Tiếng Việt"},
-    {code: "wa", name: "Walon"},
-    {code: "cy", name: "Cymraeg"},
-    {code: "wo", name: "Wollof"},
-    {code: "fy", name: "Frysk"},
-    {code: "xh", name: "isiXhosa"},
-    {code: "yo", name: "Yorùbá"},
-    {code: "za", name: "Saɯ cueŋƅ, Saw cuengh"},
-    {code: "zu", name: "isiZulu"},
-  ],
 }
 
 var defaults = {
@@ -213,16 +40,49 @@ var defaults = {
   highlightWindowSize: 2,
 };
 
-if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-  document.addEventListener("DOMContentLoaded", function() {
-    document.body.classList.add("dark-mode")
-  })
+var getSingletonAudio = lazy(() => {
+  const audio = new Audio()
+  audio.crossOrigin = "anonymous"
+  return audio
+})
+var getSilenceTrack = lazy(() => makeSilenceTrack())
+
+setupDarkMode()
+
+
+
+
+async function setupDarkMode() {
+  //if extension page but not service worker
+  if (typeof brapi.commands != "undefined" && typeof window != "undefined") {
+    const [{darkMode}] = await Promise.all([
+      getSettings(["darkMode"]),
+      new Promise(f => document.addEventListener("DOMContentLoaded", f))
+    ])
+    if (typeof darkMode == "boolean") {
+      document.body.classList.toggle("dark-mode", darkMode)
+    }
+    else {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.body.classList.add("dark-mode")
+      }
+    }
+  }
 }
 
 
 /**
  * HELPERS
  */
+function lazy(get) {
+  var value
+  return () => value || (value = get())
+}
+
+function immediate(get) {
+  return get()
+}
+
 function getQueryString() {
   return location.search ? parseQueryString(location.search) : {};
 }
@@ -237,19 +97,13 @@ function parseQueryString(search) {
   return queryString;
 }
 
-function parseUrl(url) {
-  var parser = document.createElement("A");
-  parser.href = url;
-  return parser;
-}
-
 
 /**
  * SETTINGS
  */
 function getSettings(names) {
   return new Promise(function(fulfill) {
-    brapi.storage.local.get(names || ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices"], fulfill);
+    brapi.storage.local.get(names || ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode"], fulfill);
   });
 }
 
@@ -261,8 +115,19 @@ function updateSettings(items) {
 
 function clearSettings(names) {
   return new Promise(function(fulfill) {
-    brapi.storage.local.remove(names || ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices"], fulfill);
+    brapi.storage.local.remove(names || ["voiceName", "rate", "pitch", "volume", "showHighlighting", "languages", "highlightFontSize", "highlightWindowSize", "preferredVoices", "useEmbeddedPlayer", "fixBtSilenceGap", "darkMode"], fulfill);
   });
+}
+
+async function getSetting(name) {
+  const items = await brapi.storage.local.get([name])
+  return items[name]
+}
+
+async function updateSetting(name, value) {
+  const items = {}
+  items[name] = value
+  await brapi.storage.local.set(items)
 }
 
 function getState(key) {
@@ -281,25 +146,44 @@ function setState(key, value) {
   });
 }
 
+function clearState(key) {
+  return brapi.storage.local.remove(key)
+}
+
 
 /**
  * VOICES
  */
-function getVoices() {
-  return getSettings(["awsCreds", "gcpCreds"])
+function getVoices(opts) {
+  if (!opts) opts = {}
+  return getSettings(["awsCreds", "gcpCreds", "openaiCreds", "azureCreds", "piperVoices"])
     .then(function(settings) {
       return Promise.all([
         browserTtsEngine.getVoices(),
-        googleTranslateTtsEngine.getVoices(),
+        Promise.resolve(!opts.excludeUnavailable || googleTranslateTtsEngine.ready())
+          .then(() => googleTranslateTtsEngine.getVoices())
+          .catch(err => {
+            console.error(err)
+            return []
+          }),
         remoteTtsEngine.getVoices(),
         settings.awsCreds ? amazonPollyTtsEngine.getVoices() : [],
         settings.gcpCreds ? googleWavenetTtsEngine.getVoices() : googleWavenetTtsEngine.getFreeVoices(),
         ibmWatsonTtsEngine.getVoices(),
+        nvidiaRivaTtsEngine.getVoices(),
+        phoneTtsEngine.getVoices(),
+        settings.openaiCreds ? openaiTtsEngine.getVoices() : [],
+        settings.azureCreds ? azureTtsEngine.getVoices() : [],
+        settings.piperVoices || [],
       ])
     })
     .then(function(arr) {
       return Array.prototype.concat.apply([], arr);
     })
+}
+
+function isOfflineVoice(voice) {
+  return voice.remote == false
 }
 
 function isGoogleNative(voice) {
@@ -308,6 +192,10 @@ function isGoogleNative(voice) {
 
 function isChromeOSNative(voice) {
   return /^Chrome\sOS\s/.test(voice.voiceName);
+}
+
+function isMacOSNative(voice) {
+  return /^MacOS /.test(voice.voiceName);
 }
 
 function isGoogleTranslate(voice) {
@@ -341,15 +229,39 @@ function isAmazonPolly(voice) {
 }
 
 function isGoogleWavenet(voice) {
-  return /^Google(Standard|Wavenet|Neural2) /.test(voice.voiceName);
+  return /^Google(Standard|Wavenet|Neural2|Studio) /.test(voice.voiceName);
+}
+
+function isGoogleStudio(voice) {
+  return /^Google(Studio) /.test(voice.voiceName);
 }
 
 function isIbmWatson(voice) {
   return /^IBM-Watson /.test(voice.voiceName);
 }
 
+function isNvidiaRiva(voice) {
+  return /^Nvidia-Riva /.test(voice.voiceName);
+}
+
+function isOpenai(voice) {
+  return /^ChatGPT /.test(voice.voiceName);
+}
+
+function isAzure(voice) {
+  return /^Azure /.test(voice.voiceName);
+}
+
+function isPiperVoice(voice) {
+  return /^Piper /.test(voice.voiceName)
+}
+
+function isUseMyPhone(voice) {
+  return voice.isUseMyPhone == true
+}
+
 function isRemoteVoice(voice) {
-  return isAmazonCloud(voice) || isMicrosoftCloud(voice) || isReadAloudCloud(voice) || isGoogleTranslate(voice) || isGoogleWavenet(voice) || isAmazonPolly(voice) || isIbmWatson(voice);
+  return isAmazonCloud(voice) || isMicrosoftCloud(voice) || isReadAloudCloud(voice) || isGoogleTranslate(voice) || isGoogleWavenet(voice) || isAmazonPolly(voice) || isIbmWatson(voice) || isNvidiaRiva(voice) || isOpenai(voice) || isAzure(voice);
 }
 
 function isPremiumVoice(voice) {
@@ -357,18 +269,23 @@ function isPremiumVoice(voice) {
 }
 
 function getSpeechVoice(voiceName, lang) {
-  return Promise.all([getVoices(), getSettings(["preferredVoices"])])
+  return Promise.all([getVoices({excludeUnavailable: true}), getSettings(["preferredVoices"])])
     .then(function(res) {
       var voices = res[0];
       var preferredVoiceByLang = res[1].preferredVoices || {};
       var voice;
+      //if a specific voice is indicated
       if (voiceName) voice = findVoiceByName(voices, voiceName);
+      //if no specific voice indicated, but a preferred voice was configured for the language
       if (!voice && lang) {
         voiceName = preferredVoiceByLang[lang.split("-")[0]];
         if (voiceName) voice = findVoiceByName(voices, voiceName);
       }
+      //otherwise, auto-select
+      voices = voices.filter(negate(isUseMyPhone))    //do not auto-select "Use My Phone"
       if (!voice && lang) {
-        voice = findVoiceByLang(voices.filter(isGoogleNative), lang)
+        voice = findVoiceByLang(voices.filter(isOfflineVoice), lang)
+          || findVoiceByLang(voices.filter(isGoogleNative), lang)
           || findVoiceByLang(voices.filter(negate(isRemoteVoice)), lang)
           || findVoiceByLang(voices.filter(isGoogleTranslate), lang)
           || findVoiceByLang(voices.filter(negate(isPremiumVoice)), lang)
@@ -391,55 +308,35 @@ function findVoiceByLang(voices, lang) {
     if (voice.lang) {
       var voiceLang = parseLang(voice.lang);
       if (voiceLang.lang == speechLang.lang) {
+        //language matches
         if (voiceLang.rest == speechLang.rest) {
+          //dialect matches, prefer female
           if (voice.gender == "female") match.first = match.first || voice;
           else match.second = match.second || voice;
         }
-        else if (!voiceLang.rest) match.third = match.third || voice;
+        else if (!voiceLang.rest) {
+          //voice specifies no dialect
+          match.third = match.third || voice;
+        }
         else {
-          if (voiceLang.lang == 'en' && voiceLang.rest == 'us') match.fourth = voice;
-          else match.fourth = match.fourth || voice;
+          //dialect mismatch, prefer en-US (if english)
+          if (voiceLang.lang == 'en' && voiceLang.rest == 'us') match.fourth = match.fourth || voice;
+          else match.sixth = match.sixth || voice;
         }
       }
     }
+    else {
+      //voice specifies no language, assume can handle any lang
+      match.fifth = match.fifth || voice;
+    }
   });
-  return match.first || match.second || match.third || match.fourth;
+  return match.first || match.second || match.third || match.fourth || match.fifth || match.sixth;
 }
 
 
 /**
  * HELPERS
  */
-function executeFile(file) {
-  return new Promise(function(fulfill, reject) {
-    brapi.tabs.executeScript({file: file}, function(result) {
-      if (brapi.runtime.lastError) reject(new Error(brapi.runtime.lastError.message));
-      else fulfill(result);
-    });
-  });
-}
-
-function executeScript(details) {
-  console.log(details);
-  var tabId = details.tabId;
-  delete details.tabId;
-  return new Promise(function(fulfill, reject) {
-    brapi.tabs.executeScript(tabId, details, function(result) {
-      if (brapi.runtime.lastError) reject(new Error(brapi.runtime.lastError.message));
-      else fulfill(result);
-    });
-  });
-}
-
-function insertCSS(file) {
-  return new Promise(function(fulfill, reject) {
-    brapi.tabs.insertCSS({file: file}, function(result) {
-      if (brapi.runtime.lastError) reject(new Error(brapi.runtime.lastError.message));
-      else fulfill(result);
-    })
-  });
-}
-
 function getActiveTab() {
   return new Promise(function(fulfill) {
     brapi.tabs.query({active: true, lastFocusedWindow: true}, function(tabs) {
@@ -512,12 +409,6 @@ function updateWindow(windowId, details) {
   })
 }
 
-function getBackgroundPage() {
-  return new Promise(function(fulfill) {
-    brapi.runtime.getBackgroundPage(fulfill);
-  });
-}
-
 function negate(pred) {
   return function() {
     return !pred.apply(this, arguments);
@@ -537,10 +428,6 @@ function extraAction(action) {
   }
 }
 
-function inSequence(tasks) {
-  return tasks.reduce(function(p, task) {return p.then(task)}, Promise.resolve());
-}
-
 function callMethod(name) {
   var args = Array.prototype.slice.call(arguments, 1);
   return function(obj) {
@@ -552,6 +439,10 @@ function waitMillis(millis) {
   return new Promise(function(fulfill) {
     setTimeout(fulfill, millis);
   });
+}
+
+function wait(observable, value) {
+  return rxjs.firstValueFrom(observable.pipe(rxjs.filter(x => x == value)))
 }
 
 function parseLang(lang) {
@@ -584,59 +475,30 @@ function urlEncode(oData) {
 }
 
 function ajaxGet(sUrl) {
-  return new Promise(ajaxGetCb.bind(null, sUrl));
-}
-
-function ajaxGetCb(sUrl, fulfill, reject) {
   var opts = typeof sUrl == "string" ? {url: sUrl} : sUrl;
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", opts.url, true);
-    if (opts.headers) for (var name in opts.headers) xhr.setRequestHeader(name, opts.headers[name]);
-    if (opts.responseType) xhr.responseType = opts.responseType;
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == XMLHttpRequest.DONE) {
-        if (xhr.status == 200) fulfill(xhr.response);
-        else if (reject) {
-          var err = new Error("Failed to fetch " + opts.url.substr(0, 100));
-          err.xhr = xhr;
-          reject(err);
-        }
+  return fetch(opts.url, {headers: opts.headers})
+    .then(res => {
+      if (!res.ok) throw new Error("Server returns " + res.status)
+      switch (opts.responseType) {
+        case "json": return res.json()
+        case "blob": return res.blob()
+        default: return res.text()
       }
-    };
-    xhr.send(null);
+    })
 }
 
 function ajaxPost(sUrl, oData, sType) {
-  return new Promise(function(fulfill, reject) {
-    var xhr = new XMLHttpRequest();
-    xhr.open("POST", sUrl, true);
-    xhr.setRequestHeader("Content-type", sType == "json" ? "application/json" : "application/x-www-form-urlencoded");
-    xhr.onreadystatechange = function() {
-      if (xhr.readyState == XMLHttpRequest.DONE) {
-        if (xhr.status == 200) fulfill(xhr.responseText);
-        else reject(new Error("Failed to fetch " + sUrl.substr(0, 100)));
-      }
-    };
-    xhr.send(sType == "json" ? JSON.stringify(oData) : urlEncode(oData));
-  })
-}
-
-function objectAssign(target, varArgs) { // .length of function is 2
-  'use strict';
-  if (target == null) throw new TypeError('Cannot convert undefined or null to object');
-  var to = Object(target);
-  for (var index = 1; index < arguments.length; index++) {
-    var nextSource = arguments[index];
-    if (nextSource != null) { // Skip over if undefined or null
-      for (var nextKey in nextSource) {
-        // Avoid bugs when hasOwnProperty is shadowed
-        if (Object.prototype.hasOwnProperty.call(nextSource, nextKey)) {
-          to[nextKey] = nextSource[nextKey];
-        }
-      }
-    }
-  }
-  return to;
+  return fetch(sUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": sType == "json" ? "application/json" : "application/x-www-form-urlencoded"
+      },
+      body: sType == "json" ? JSON.stringify(oData) : urlEncode(oData)
+    })
+    .then(res => {
+      if (!res.ok) throw new Error("Server returns " + res.status)
+      return res.text()
+    })
 }
 
 
@@ -644,75 +506,6 @@ function objectAssign(target, varArgs) { // .length of function is 2
  * POLYFILLS
  */
 function polyfills() {
-if (typeof Object.assign != 'function') {
-  // Must be writable: true, enumerable: false, configurable: true
-  Object.defineProperty(Object, "assign", {
-    value: objectAssign,
-    writable: true,
-    configurable: true
-  });
-}
-
-if (!String.prototype.startsWith) {
-  String.prototype.startsWith = function(search, pos) {
-  return this.substr(!pos || pos < 0 ? 0 : +pos, search.length) === search;
-  };
-}
-
-if (!String.prototype.endsWith) {
-  String.prototype.endsWith = function(search, this_len) {
-    if (this_len === undefined || this_len > this.length) {
-      this_len = this.length;
-    }
-    return this.substring(this_len - search.length, this_len) === search;
-  };
-}
-
-if (!Array.prototype.includes) {
-  Object.defineProperty(Array.prototype, 'includes', {
-    value: function(searchElement, fromIndex) {
-      if (this == null) throw new TypeError('"this" is null or not defined');
-      var o = Object(this);
-      var len = o.length >>> 0;
-      if (len === 0) return false;
-      var n = fromIndex | 0;
-      var k = Math.max(n >= 0 ? n : len - Math.abs(n), 0);
-      function sameValueZero(x, y) {
-        return x === y || (typeof x === 'number' && typeof y === 'number' && isNaN(x) && isNaN(y));
-      }
-      while (k < len) {
-        if (sameValueZero(o[k], searchElement)) return true;
-        k++;
-      }
-      return false;
-    },
-    configurable: true,
-    writable: true
-  });
-}
-
-if (!Array.prototype.find) {
-  Object.defineProperty(Array.prototype, 'find', {
-    value: function(predicate) {
-      if (this == null) throw new TypeError('"this" is null or not defined');
-      var o = Object(this);
-      var len = o.length >>> 0;
-      if (typeof predicate !== 'function') throw new TypeError('predicate must be a function');
-      var thisArg = arguments[1];
-      var k = 0;
-      while (k < len) {
-        var kValue = o[k];
-        if (predicate.call(thisArg, kValue, k, o)) return kValue;
-        k++;
-      }
-      return undefined;
-    },
-    configurable: true,
-    writable: true
-  });
-}
-
-if (!Array.prototype.groupBy) {
   Object.defineProperty(Array.prototype, 'groupBy', {
     value: function(keySelector, valueReducer) {
       if (!valueReducer) {
@@ -736,57 +529,6 @@ if (!Array.prototype.groupBy) {
     configurable: true,
     writable: true
   })
-}
-
-if (!Array.prototype.flat) {
-  Object.defineProperty(Array.prototype, 'flat', {
-    configurable: true,
-    writable: true,
-    value: function () {
-      var depth =
-        typeof arguments[0] === 'undefined' ? 1 : Number(arguments[0]) || 0;
-      var result = [];
-      var forEach = result.forEach;
-
-      var flatDeep = function (arr, depth) {
-        forEach.call(arr, function (val) {
-          if (depth > 0 && Array.isArray(val)) {
-            flatDeep(val, depth - 1);
-          } else {
-            result.push(val);
-          }
-        });
-      };
-
-      flatDeep(this, depth);
-      return result;
-    },
-  });
-}
-
-if (!Array.prototype.flatMap) {
-  Object.defineProperty(Array.prototype, 'flatMap', {
-    configurable: true,
-    writable: true,
-    value: function () {
-      return Array.prototype.map.apply(this, arguments).flat(1);
-    },
-  });
-}
-
-if (!Promise.prototype.finally) {
-  Object.defineProperty(Promise.prototype, 'finally', {
-    value: function(callback) {
-      var promise = this;
-      function chain() {
-        return Promise.resolve(callback()).then(function() {return promise});
-      }
-      return promise.then(chain, chain);
-    },
-    configurable: true,
-    writable: true
-  })
-}
 }
 
 
@@ -834,6 +576,10 @@ function getBrowser() {
   if (/Opera|OPR\//.test(navigator.userAgent)) return 'opera';
   if (/firefox/i.test(navigator.userAgent)) return 'firefox';
   return 'chrome';
+}
+
+function isIOS() {
+  return !!navigator.platform && /iPad|iPhone|iPod/.test(navigator.platform)
 }
 
 function getHotkeySettingsUrl() {
@@ -953,17 +699,22 @@ function clearAuthToken() {
     })
 }
 
-function getAccountInfo(authToken) {
-  return ajaxGet(config.serviceUrl + "/read-aloud/get-account?t=" + authToken)
-    .then(JSON.parse)
-    .then(function(account) {
-      account.balance += account.freeBalance;
-      return account;
-    })
-    .catch(function(err) {
-      if (err.xhr && err.xhr.status == 401) return clearSettings(["authToken"]).then(function() {return null});
-      else throw err;
-    })
+async function getAccountInfo(authToken) {
+  const res = await fetch(config.serviceUrl + "/read-aloud/get-account?t=" + authToken)
+  if (res.ok) {
+    const account = await res.json()
+    account.balance += account.freeBalance;
+    return account;
+  }
+  else {
+    if (res.status == 401) {
+      await clearSettings(["authToken"])
+      return null
+    }
+    else {
+      throw new Error("Can't fetch account info, server returns " + res.status)
+    }
+  }
 }
 
 function isMobileOS() {
@@ -975,37 +726,6 @@ function isMobileOS() {
 function getAllFrames(tabId) {
   return new Promise(function(fulfill) {
     brapi.webNavigation.getAllFrames({tabId: tabId}, fulfill);
-  })
-}
-
-function getFrameTexts(tabId, frameId, scripts) {
-  return new Promise(function(fulfill, reject) {
-    function onConnect(port) {
-      if (port.name == "ReadAloudGetTextsScript") {
-        brapi.runtime.onConnect.removeListener(onConnect);
-        var peer = new RpcPeer(new ExtensionMessagingPeer(port));
-        peer.onInvoke = function(method, arg0) {
-          clearTimeout(timer);
-          if (method == "onTexts") fulfill(arg0);
-          else reject(new Error("Unexpected"));
-        }
-      }
-    }
-    function onError(err) {
-      brapi.runtime.onConnect.removeListener(onConnect);
-      clearTimeout(timer);
-      reject(err);
-    }
-    function onTimeout() {
-      brapi.runtime.onConnect.removeListener(onConnect);
-      reject(new Error("Timeout waiting for content script to connect"));
-    }
-    brapi.runtime.onConnect.addListener(onConnect);
-    var tasks = scripts.map(function(file) {
-      return executeScript.bind(null, {file: file, tabId: tabId, frameId: frameId});
-    })
-    inSequence(tasks).catch(onError);
-    var timer = setTimeout(onTimeout, 15000);
   })
 }
 
@@ -1034,8 +754,8 @@ function promiseTimeout(millis, errorMsg, promise) {
 
 function bgPageInvoke(method, args) {
   return new Promise(function(fulfill, reject) {
-    brapi.runtime.sendMessage({method: method, args: args}, function(res) {
-      if (res && res.error) reject(new Error(res.error));
+    brapi.runtime.sendMessage({dest: "serviceWorker", method: method, args: args}, function(res) {
+      if (res && res.error) reject(res.error);
       else fulfill(res);
     })
   })
@@ -1060,7 +780,7 @@ function truncateRepeatedChars(text, max) {
   var startIndex = 0
   var count = 1
   for (var i=1; i<text.length; i++) {
-    if (text.charCodeAt(i) == text.charCodeAt(i-1)) {
+    if (text.charCodeAt(i) == text.charCodeAt(i-1) && !/^\d$/.test(text.charAt(i))) {
       count++
       if (count == max) result += text.slice(startIndex, i+1)
     }
@@ -1072,3 +792,451 @@ function truncateRepeatedChars(text, max) {
   if (count < max) result += text.slice(startIndex)
   return result
 }
+
+function playAudioHere(urlPromise, options, startTime) {
+  const audio = getSingletonAudio()
+  audio.pause()
+  if (!isIOS()) {
+    audio.defaultPlaybackRate = (options.rate || 1) * (options.rateAdjust || 1)
+    audio.volume = options.volume || 1
+  }
+  const silenceTrack = getSilenceTrack()
+
+  const timeoutPromise = waitMillis(10*1000)
+    .then(() => Promise.reject(new Error("Timeout, TTS never started, try picking another voice?")))
+  const {abortPromise, abort} = makeAbortable()
+  const readyPromise = Promise.resolve(urlPromise)
+    .then(async url => {
+      const canPlayPromise = new Promise((fulfill, reject) => {
+        audio.oncanplay = fulfill
+        audio.onerror = () => reject(new Error(audio.error.message || audio.error.code))
+      })
+      audio.src = url
+      await canPlayPromise
+
+      if (startTime) {
+        const waitTime = startTime - Date.now()
+        if (waitTime > 0) await waitMillis(waitTime)
+      }
+    })
+
+  const startPromise = Promise.race([readyPromise, abortPromise, timeoutPromise])
+    .then(async () => {
+      await audio.play()
+        .catch(err => {
+          if (err instanceof DOMException) throw new Error(err.name || err.message)
+          else throw err
+        })
+      silenceTrack.start()
+    })
+
+  const endPromise = new Promise((fulfill, reject) => {
+    audio.onended = fulfill
+    audio.onerror = () => reject(new Error(audio.error.message || audio.error.code))
+  })
+  .finally(() => silenceTrack.stop())
+
+  return {
+    startPromise,
+    endPromise: endPromise,
+    pause() {
+      abort(new Error("Aborted"))
+      audio.pause()
+      silenceTrack.stop()
+    },
+    async resume() {
+      await audio.play()
+      silenceTrack.start()
+      return true
+    }
+  }
+}
+
+function canUseEmbeddedPlayer() {
+  return brapi.tts && brapi.offscreen ? true : false
+  //without chrome.tts, using WebSpeech inside tab requires initial page interaction
+  //without offscreen, playing audio inside tab requires initial page interaction
+}
+
+function makeSilenceTrack() {
+  const audio = new Audio(brapi.runtime.getURL("sound/silence.mp3"))
+  audio.loop = true
+  const stateMachine = new StateMachine({
+    IDLE: {
+      start() {
+        audio.play().catch(console.error)
+        return "PLAYING"
+      },
+      stop() {}
+    },
+    PLAYING: {
+      start() {},
+      stop() {
+        return "STOPPING"
+      }
+    },
+    STOPPING: {
+      onTransitionIn() {
+        this.timer = setTimeout(() => stateMachine.trigger("onStop"), 15*1000)
+      },
+      onStop() {
+        audio.pause()
+        return "IDLE"
+      },
+      start() {
+        clearTimeout(this.timer)
+        return "PLAYING"
+      },
+      stop() {}
+    }
+  })
+  return {
+    start() {
+      stateMachine.trigger("start")
+    },
+    stop() {
+      stateMachine.trigger("stop")
+    }
+  }
+}
+
+async function getRemoteConfig() {
+  let {remoteConfig} = await getSettings("remoteConfig")
+  if (remoteConfig && remoteConfig.expire > Date.now()) {
+    //still valid, return stored object
+    return remoteConfig
+  }
+  try {
+    //attempt to get latest from server
+    remoteConfig = await ajaxGet({url: config.serviceUrl + "/read-aloud/config", responseType: "json"})
+  }
+  catch (err) {
+    console.error(err)
+    //if fail, use the expired object or create a dummy
+    if (!remoteConfig) remoteConfig = {}
+  }
+  //dont check again for an hour
+  remoteConfig.expire = Date.now() + 3600*1000
+  await updateSettings({remoteConfig})
+  return remoteConfig
+}
+
+function makeAbortable() {
+  let abort
+  return {
+    abortPromise: new Promise((f,r) => abort = r),
+    abort
+  }
+}
+
+/**
+ * Repeat an action
+ * @param {Object} opt - options
+ * @param {Function} opt.action - action to repeat
+ * @param {Function} opt.until - termination condition
+ * @param {Number} opt.delay - delay between actions
+ * @param {Number} opt.max - maximum number of repetitions
+ * @returns {Promise}
+ */
+function repeat(opt) {
+  if (!opt || !opt.action) throw new Error("Missing action")
+  return iter(1)
+  function iter(n) {
+    return Promise.resolve()
+      .then(opt.action)
+      .then(function(result) {
+        if (opt.until && opt.until(result)) return result
+        if (opt.max && n >= opt.max) return result
+        if (!opt.delay) return iter(n+1)
+        return new Promise(function(f) {setTimeout(f, opt.delay)}).then(iter.bind(null, n+1))
+      })
+  }
+}
+
+function when(pred, val) {
+  if (typeof pred == "function" ? pred() : pred) {
+    return {
+      when() {
+        return this
+      },
+      else() {
+        return typeof val == "function" ? val() : val
+      }
+    }
+  }
+  else {
+    return {
+      when,
+      else(val) {
+        return typeof val == "function" ? val() : val
+      }
+    }
+  }
+}
+
+function removeAllAttrs(el, recursive) {
+  while (el.attributes.length > 0) el.removeAttribute(el.attributes[0].name)
+  if (recursive) for (const child of el.children) removeAllAttrs(child, true)
+}
+
+function escapeXml(unsafe) {
+  return unsafe.replace(/[<>&'"]/g, function (c) {
+    switch (c) {
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '&': return '&amp;';
+        case '\'': return '&apos;';
+        case '"': return '&quot;';
+    }
+  })
+}
+
+var languageTable = (function() {
+  const nameFromCode = new Map([
+    ['af', 'Afrikaans'],
+    ['af-ZA', 'Afrikaans (South Africa)'],
+    ['ar', 'Arabic'],
+    ['ar-AE', 'Arabic (U.A.E.)'],
+    ['ar-BH', 'Arabic (Bahrain)'],
+    ['ar-DZ', 'Arabic (Algeria)'],
+    ['ar-EG', 'Arabic (Egypt)'],
+    ['ar-IQ', 'Arabic (Iraq)'],
+    ['ar-JO', 'Arabic (Jordan)'],
+    ['ar-KW', 'Arabic (Kuwait)'],
+    ['ar-LB', 'Arabic (Lebanon)'],
+    ['ar-LY', 'Arabic (Libya)'],
+    ['ar-MA', 'Arabic (Morocco)'],
+    ['ar-OM', 'Arabic (Oman)'],
+    ['ar-QA', 'Arabic (Qatar)'],
+    ['ar-SA', 'Arabic (Saudi Arabia)'],
+    ['ar-SY', 'Arabic (Syria)'],
+    ['ar-TN', 'Arabic (Tunisia)'],
+    ['ar-YE', 'Arabic (Yemen)'],
+    ['az', 'Azeri (Latin)'],
+    ['az-AZ', 'Azeri (Latin) (Azerbaijan)'],
+    ['az-AZ', 'Azeri (Cyrillic) (Azerbaijan)'],
+    ['be', 'Belarusian'],
+    ['be-BY', 'Belarusian (Belarus)'],
+    ['bg', 'Bulgarian'],
+    ['bg-BG', 'Bulgarian (Bulgaria)'],
+    ['bs-BA', 'Bosnian (Bosnia and Herzegovina)'],
+    ['ca', 'Catalan'],
+    ['ca-ES', 'Catalan (Spain)'],
+    ['cs', 'Czech'],
+    ['cs-CZ', 'Czech (Czech Republic)'],
+    ['cy', 'Welsh'],
+    ['cy-GB', 'Welsh (United Kingdom)'],
+    ['da', 'Danish'],
+    ['da-DK', 'Danish (Denmark)'],
+    ['de', 'German'],
+    ['de-AT', 'German (Austria)'],
+    ['de-CH', 'German (Switzerland)'],
+    ['de-DE', 'German (Germany)'],
+    ['de-LI', 'German (Liechtenstein)'],
+    ['de-LU', 'German (Luxembourg)'],
+    ['dv', 'Divehi'],
+    ['dv-MV', 'Divehi (Maldives)'],
+    ['el', 'Greek'],
+    ['el-GR', 'Greek (Greece)'],
+    ['en', 'English'],
+    ['en-AU', 'English (Australia)'],
+    ['en-BZ', 'English (Belize)'],
+    ['en-CA', 'English (Canada)'],
+    ['en-CB', 'English (Caribbean)'],
+    ['en-GB', 'English (United Kingdom)'],
+    ['en-IE', 'English (Ireland)'],
+    ['en-IN', 'English (Indian)'],
+    ['en-JM', 'English (Jamaica)'],
+    ['en-NZ', 'English (New Zealand)'],
+    ['en-PH', 'English (Republic of the Philippines)'],
+    ['en-TT', 'English (Trinidad and Tobago)'],
+    ['en-US', 'English (United States)'],
+    ['en-ZA', 'English (South Africa)'],
+    ['en-ZW', 'English (Zimbabwe)'],
+    ['eo', 'Esperanto'],
+    ['es', 'Spanish'],
+    ['es-AR', 'Spanish (Argentina)'],
+    ['es-BO', 'Spanish (Bolivia)'],
+    ['es-CL', 'Spanish (Chile)'],
+    ['es-CO', 'Spanish (Colombia)'],
+    ['es-CR', 'Spanish (Costa Rica)'],
+    ['es-DO', 'Spanish (Dominican Republic)'],
+    ['es-EC', 'Spanish (Ecuador)'],
+    ['es-ES', 'Spanish (Castilian)'],
+    ['es-ES', 'Spanish (Spain)'],
+    ['es-GT', 'Spanish (Guatemala)'],
+    ['es-HN', 'Spanish (Honduras)'],
+    ['es-MX', 'Spanish (Mexico)'],
+    ['es-NI', 'Spanish (Nicaragua)'],
+    ['es-PA', 'Spanish (Panama)'],
+    ['es-PE', 'Spanish (Peru)'],
+    ['es-PR', 'Spanish (Puerto Rico)'],
+    ['es-PY', 'Spanish (Paraguay)'],
+    ['es-SV', 'Spanish (El Salvador)'],
+    ['es-UY', 'Spanish (Uruguay)'],
+    ['es-VE', 'Spanish (Venezuela)'],
+    ['et', 'Estonian'],
+    ['et-EE', 'Estonian (Estonia)'],
+    ['eu', 'Basque'],
+    ['eu-ES', 'Basque (Spain)'],
+    ['fa', 'Farsi'],
+    ['fa-IR', 'Farsi (Iran)'],
+    ['fi', 'Finnish'],
+    ['fi-FI', 'Finnish (Finland)'],
+    ['fo', 'Faroese'],
+    ['fo-FO', 'Faroese (Faroe Islands)'],
+    ['fr', 'French'],
+    ['fr-BE', 'French (Belgium)'],
+    ['fr-CA', 'French (Canada)'],
+    ['fr-CH', 'French (Switzerland)'],
+    ['fr-FR', 'French (France)'],
+    ['fr-LU', 'French (Luxembourg)'],
+    ['fr-MC', 'French (Principality of Monaco)'],
+    ['gl', 'Galician'],
+    ['gl-ES', 'Galician (Spain)'],
+    ['gu', 'Gujarati'],
+    ['gu-IN', 'Gujarati (India)'],
+    ['he', 'Hebrew'],
+    ['he-IL', 'Hebrew (Israel)'],
+    ['hi', 'Hindi'],
+    ['hi-IN', 'Hindi (India)'],
+    ['hr', 'Croatian'],
+    ['hr-BA', 'Croatian (Bosnia and Herzegovina)'],
+    ['hr-HR', 'Croatian (Croatia)'],
+    ['hu', 'Hungarian'],
+    ['hu-HU', 'Hungarian (Hungary)'],
+    ['hy', 'Armenian'],
+    ['hy-AM', 'Armenian (Armenia)'],
+    ['id', 'Indonesian'],
+    ['id-ID', 'Indonesian (Indonesia)'],
+    ['is', 'Icelandic'],
+    ['is-IS', 'Icelandic (Iceland)'],
+    ['it', 'Italian'],
+    ['it-CH', 'Italian (Switzerland)'],
+    ['it-IT', 'Italian (Italy)'],
+    ['ja', 'Japanese'],
+    ['ja-JP', 'Japanese (Japan)'],
+    ['ka', 'Georgian'],
+    ['ka-GE', 'Georgian (Georgia)'],
+    ['kk', 'Kazakh'],
+    ['kk-KZ', 'Kazakh (Kazakhstan)'],
+    ['kn', 'Kannada'],
+    ['kn-IN', 'Kannada (India)'],
+    ['ko', 'Korean'],
+    ['ko-KR', 'Korean (Korea)'],
+    ['kok', 'Konkani'],
+    ['kok-IN', 'Konkani (India)'],
+    ['ky', 'Kyrgyz'],
+    ['ky-KG', 'Kyrgyz (Kyrgyzstan)'],
+    ['lt', 'Lithuanian'],
+    ['lt-LT', 'Lithuanian (Lithuania)'],
+    ['lv', 'Latvian'],
+    ['lv-LV', 'Latvian (Latvia)'],
+    ['mi', 'Maori'],
+    ['mi-NZ', 'Maori (New Zealand)'],
+    ['mk', 'FYRO Macedonian'],
+    ['mk-MK', 'FYRO Macedonian (Former Yugoslav Republic of Macedonia)'],
+    ['mn', 'Mongolian'],
+    ['mn-MN', 'Mongolian (Mongolia)'],
+    ['mr', 'Marathi'],
+    ['mr-IN', 'Marathi (India)'],
+    ['ms', 'Malay'],
+    ['ms-BN', 'Malay (Brunei Darussalam)'],
+    ['ms-MY', 'Malay (Malaysia)'],
+    ['mt', 'Maltese'],
+    ['mt-MT', 'Maltese (Malta)'],
+    ['nb', 'Norwegian (Bokm?l)'],
+    ['nb-NO', 'Norwegian (Bokm?l) (Norway)'],
+    ['nl', 'Dutch'],
+    ['nl-BE', 'Dutch (Belgium)'],
+    ['nl-NL', 'Dutch (Netherlands)'],
+    ['nn-NO', 'Norwegian (Nynorsk) (Norway)'],
+    ['ns', 'Northern Sotho'],
+    ['ns-ZA', 'Northern Sotho (South Africa)'],
+    ['pa', 'Punjabi'],
+    ['pa-IN', 'Punjabi (India)'],
+    ['pl', 'Polish'],
+    ['pl-PL', 'Polish (Poland)'],
+    ['ps', 'Pashto'],
+    ['ps-AR', 'Pashto (Afghanistan)'],
+    ['pt', 'Portuguese'],
+    ['pt-BR', 'Portuguese (Brazil)'],
+    ['pt-PT', 'Portuguese (Portugal)'],
+    ['qu', 'Quechua'],
+    ['qu-BO', 'Quechua (Bolivia)'],
+    ['qu-EC', 'Quechua (Ecuador)'],
+    ['qu-PE', 'Quechua (Peru)'],
+    ['ro', 'Romanian'],
+    ['ro-RO', 'Romanian (Romania)'],
+    ['ru', 'Russian'],
+    ['ru-RU', 'Russian (Russia)'],
+    ['sa', 'Sanskrit'],
+    ['sa-IN', 'Sanskrit (India)'],
+    ['se', 'Sami (Northern)'],
+    ['se-FI', 'Sami (Northern) (Finland)'],
+    ['se-FI', 'Sami (Skolt) (Finland)'],
+    ['se-FI', 'Sami (Inari) (Finland)'],
+    ['se-NO', 'Sami (Northern) (Norway)'],
+    ['se-NO', 'Sami (Lule) (Norway)'],
+    ['se-NO', 'Sami (Southern) (Norway)'],
+    ['se-SE', 'Sami (Northern) (Sweden)'],
+    ['se-SE', 'Sami (Lule) (Sweden)'],
+    ['se-SE', 'Sami (Southern) (Sweden)'],
+    ['sk', 'Slovak'],
+    ['sk-SK', 'Slovak (Slovakia)'],
+    ['sl', 'Slovenian'],
+    ['sl-SI', 'Slovenian (Slovenia)'],
+    ['sq', 'Albanian'],
+    ['sq-AL', 'Albanian (Albania)'],
+    ['sr-BA', 'Serbian (Latin) (Bosnia and Herzegovina)'],
+    ['sr-BA', 'Serbian (Cyrillic) (Bosnia and Herzegovina)'],
+    ['sr-SP', 'Serbian (Latin) (Serbia and Montenegro)'],
+    ['sr-SP', 'Serbian (Cyrillic) (Serbia and Montenegro)'],
+    ['sv', 'Swedish'],
+    ['sv-FI', 'Swedish (Finland)'],
+    ['sv-SE', 'Swedish (Sweden)'],
+    ['sw', 'Swahili'],
+    ['sw-KE', 'Swahili (Kenya)'],
+    ['syr', 'Syriac'],
+    ['syr-SY', 'Syriac (Syria)'],
+    ['ta', 'Tamil'],
+    ['ta-IN', 'Tamil (India)'],
+    ['te', 'Telugu'],
+    ['te-IN', 'Telugu (India)'],
+    ['th', 'Thai'],
+    ['th-TH', 'Thai (Thailand)'],
+    ['tl', 'Tagalog'],
+    ['tl-PH', 'Tagalog (Philippines)'],
+    ['tn', 'Tswana'],
+    ['tn-ZA', 'Tswana (South Africa)'],
+    ['tr', 'Turkish'],
+    ['tr-TR', 'Turkish (Turkey)'],
+    ['tt', 'Tatar'],
+    ['tt-RU', 'Tatar (Russia)'],
+    ['ts', 'Tsonga'],
+    ['uk', 'Ukrainian'],
+    ['uk-UA', 'Ukrainian (Ukraine)'],
+    ['ur', 'Urdu'],
+    ['ur-PK', 'Urdu (Islamic Republic of Pakistan)'],
+    ['uz', 'Uzbek (Latin)'],
+    ['uz-UZ', 'Uzbek (Latin) (Uzbekistan)'],
+    ['uz-UZ', 'Uzbek (Cyrillic) (Uzbekistan)'],
+    ['vi', 'Vietnamese'],
+    ['vi-VN', 'Vietnamese (Viet Nam)'],
+    ['xh', 'Xhosa'],
+    ['xh-ZA', 'Xhosa (South Africa)'],
+    ['zh', 'Chinese'],
+    ['zh-CN', 'Chinese (S)'],
+    ['zh-HK', 'Chinese (Hong Kong)'],
+    ['zh-MO', 'Chinese (Macau)'],
+    ['zh-SG', 'Chinese (Singapore)'],
+    ['zh-TW', 'Chinese (T)'],
+    ['zu', 'Zulu'],
+    ['zu-ZA', 'Zulu (South Africa)'],
+  ])
+  return {
+    getNameFromCode(lang) {
+      return nameFromCode.get(lang)
+    }
+  }
+})();

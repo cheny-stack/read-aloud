@@ -5,6 +5,11 @@ var googleTranslateTtsEngine = new GoogleTranslateTtsEngine();
 var amazonPollyTtsEngine = new AmazonPollyTtsEngine();
 var googleWavenetTtsEngine = new GoogleWavenetTtsEngine();
 var ibmWatsonTtsEngine = new IbmWatsonTtsEngine();
+var nvidiaRivaTtsEngine = new NvidiaRivaTtsEngine();
+var phoneTtsEngine = new PhoneTtsEngine();
+var openaiTtsEngine = new OpenaiTtsEngine();
+var azureTtsEngine = new AzureTtsEngine();
+const piperTtsEngine = new PiperTtsEngine()
 
 
 /*
@@ -32,16 +37,17 @@ interface TtsEngine {
   speak: function(text: string, opts: Options, onEvent: (e:Event) => void): void
   stop: function(): void
   pause: function(): void
-  resume: function(): void
+  resume: function(): void|Promise<void>
   isSpeaking: function(callback): void
   getVoices: function(): Voice[]
 }
 */
 
 function BrowserTtsEngine() {
+  brapi.tts.stop()    //workaround: chrome.tts.speak doesn't work first time on cold start for some reason
   this.speak = function(text, options, onEvent) {
     brapi.tts.speak(text, {
-      voiceName: options.voice.voiceName,
+      voiceName: options.voice.voiceId || options.voice.voiceName,
       lang: options.lang,
       rate: options.rate,
       pitch: options.pitch,
@@ -55,12 +61,19 @@ function BrowserTtsEngine() {
   this.pause = brapi.tts.pause;
   this.resume = brapi.tts.resume;
   this.isSpeaking = brapi.tts.isSpeaking;
-  this.getVoices = function() {
-    return new Promise(function(fulfill) {
-      brapi.tts.getVoices(function(voices) {
-        fulfill(voices || []);
-      })
-    })
+  this.getVoices = async function() {
+    const voices = await new Promise(f => brapi.tts.getVoices(f)) || []
+    const platform = await brapi.runtime.getPlatformInfo()
+    if (platform.os == "mac") {
+      for (const voice of voices) {
+          if (voice.remote == false && !voice.voiceName.includes(" ")) {
+            voice.voiceId = voice.voiceName
+            voice.voiceName = "MacOS " + (languageTable.getNameFromCode(voice.lang) || voice.lang) + " [" + voice.voiceId + "]"
+          }
+      }
+    }
+    return voices
+      .filter(voice => !isPiperVoice(voice))
   }
 }
 
@@ -78,8 +91,10 @@ function WebSpeechEngine() {
     utter.onstart = onEvent.bind(null, {type: 'start', charIndex: 0});
     utter.onend = onEvent.bind(null, {type: 'end', charIndex: text.length});
     utter.onerror = function(event) {
-      onEvent({type: 'error', errorMessage: event.error});
+      if (event.error == "canceled" || event.error == "interrupted") return;
+      onEvent({type: 'error', error: new Error(event.error)});
     };
+    speechSynthesis.cancel()
     speechSynthesis.speak(utter);
   }
   this.stop = function() {
@@ -130,7 +145,7 @@ function TimeoutTtsEngine(baseEngine, timeoutMillis) {
     timer = setTimeout(function() {
       baseEngine.stop();
       if (started) onEvent({type: "end", charIndex: text.length});
-      else onEvent({type: "error", errorMessage: "Timeout, TTS never started, try picking another voice?"});
+      else onEvent({type: "error", error: new Error("Timeout, TTS never started, try picking another voice?")});
     },
     timeoutMillis);
     baseEngine.speak(text, options, function(event) {
@@ -149,14 +164,11 @@ function TimeoutTtsEngine(baseEngine, timeoutMillis) {
 
 function RemoteTtsEngine(serviceUrl) {
   var manifest = brapi.runtime.getManifest();
-  var iOS = !!navigator.platform && /iPad|iPhone|iPod/.test(navigator.platform);
-  var audio = document.createElement("AUDIO");
   var isSpeaking = false;
   var nextStartTime = 0;
-  var waitTimer;
   var authToken;
   var clientId;
-  var speakPromise;
+  var audio;
   function ready(options) {
     return getAuthToken()
       .then(function(token) {authToken = token})
@@ -174,63 +186,41 @@ function RemoteTtsEngine(serviceUrl) {
       })
   }
   this.speak = function(utterance, options, onEvent) {
-    if (!options.volume) options.volume = 1;
-    if (!options.rate) options.rate = 1;
-    audio.pause();
-    if (!iOS) {
-      audio.volume = options.volume;
-      audio.defaultPlaybackRate = options.rate;
-    }
-    speakPromise = ready(options)
+    const urlPromise = ready(options)
       .then(function() {
-        audio.src = getAudioUrl(utterance, options.lang, options.voice);
-        return new Promise(function(fulfill) {audio.oncanplay = fulfill});
+        return getAudioUrl(utterance, options.lang, options.voice)
       })
-      .then(function() {
-        var waitTime = nextStartTime - Date.now();
-        if (waitTime > 0) return new Promise(function(f) {waitTimer = setTimeout(f, waitTime)});
-      })
-      .then(function() {
+    audio = playAudio(urlPromise, options, nextStartTime)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
         isSpeaking = true;
-        return audio.play();
       })
       .catch(function(err) {
-        onEvent({
-          type: "error",
-          errorMessage: err.name == "NotAllowedError" ? JSON.stringify({code: "error_user_gesture_required"}) : err.message
-        })
+        onEvent({type: "error", error: err})
       })
-    audio.onplay = onEvent.bind(null, {type: 'start', charIndex: 0});
-    audio.onended = function() {
-      onEvent({type: 'end', charIndex: utterance.length});
-      isSpeaking = false;
-    };
-    audio.onerror = function() {
-      onEvent({type: "error", errorMessage: audio.error.message});
-      isSpeaking = false;
-    };
-    audio.load();
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
   }
   this.isSpeaking = function(callback) {
     callback(isSpeaking);
   }
   this.pause =
   this.stop = function() {
-    speakPromise.then(function() {
-    clearTimeout(waitTimer);
-    audio.pause();
-    })
+    audio.pause()
   }
   this.resume = function() {
-    audio.play();
+    return audio.resume()
   }
   this.prefetch = function(utterance, options) {
-    if (!iOS) {
+    if (!isIOS()) {
       ajaxGet(getAudioUrl(utterance, options.lang, options.voice, true));
     }
   }
   this.setNextStartTime = function(time, options) {
-    if (!iOS)
+    if (!isIOS())
       nextStartTime = time || 0;
   }
   this.getVoices = function() {
@@ -373,56 +363,42 @@ function RemoteTtsEngine(serviceUrl) {
 
 
 function GoogleTranslateTtsEngine() {
-  var audio = document.createElement("AUDIO");
   var prefetchAudio;
   var isSpeaking = false;
-  var speakPromise;
+  var audio;
   this.ready = function() {
     return googleTranslateReady();
   };
   this.speak = function(utterance, options, onEvent) {
-    if (!options.volume) options.volume = 1;
-    if (!options.rate) options.rate = 1;
-    audio.pause();
-    audio.volume = options.volume;
-    audio.defaultPlaybackRate = options.rate * 1.1;
-    audio.onplay = function() {
-      onEvent({type: 'start', charIndex: 0});
-      isSpeaking = true;
-    };
-    audio.onended = function() {
-      onEvent({type: 'end', charIndex: utterance.length});
-      isSpeaking = false;
-    };
-    audio.onerror = function() {
-      onEvent({type: "error", errorMessage: audio.error.message});
-      isSpeaking = false;
-    };
-    speakPromise = Promise.resolve()
+    options.rateAdjust = 1.1
+    const urlPromise = Promise.resolve()
       .then(function() {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
         else return getAudioUrl(utterance, options.voice.lang);
       })
-      .then(function(url) {
-        audio.src = url;
-        return audio.play();
+    audio = playAudio(urlPromise, options)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true;
       })
       .catch(function(err) {
-        onEvent({
-          type: "error",
-          errorMessage: err.name == "NotAllowedError" ? JSON.stringify({code: "error_user_gesture_required"}) : err.message
-        })
+        onEvent({type: "error", error: err})
       })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
   };
   this.isSpeaking = function(callback) {
     callback(isSpeaking);
   };
   this.pause =
   this.stop = function() {
-    speakPromise.then(function() {audio.pause()});
+    audio.pause()
   };
   this.resume = function() {
-    audio.play();
+    return audio.resume()
   };
   this.prefetch = function(utterance, options) {
     getAudioUrl(utterance, options.voice.lang)
@@ -511,55 +487,39 @@ function GoogleTranslateTtsEngine() {
 
 
 function AmazonPollyTtsEngine() {
-  var pollyPromise;
-  var audio = document.createElement("AUDIO");
+  var getPolly = lazy(createPolly)
   var prefetchAudio;
   var isSpeaking = false;
-  var speakPromise;
+  var audio;
   this.speak = function(utterance, options, onEvent) {
-    if (!options.volume) options.volume = 1;
-    if (!options.rate) options.rate = 1;
-    if (!options.pitch) options.pitch = 1;
-    audio.pause();
-    audio.volume = options.volume;
-    audio.defaultPlaybackRate = options.rate;
-    audio.onplay = function() {
-      onEvent({type: 'start', charIndex: 0});
-      isSpeaking = true;
-    };
-    audio.onended = function() {
-      onEvent({type: 'end', charIndex: utterance.length});
-      isSpeaking = false;
-    };
-    audio.onerror = function() {
-      onEvent({type: "error", errorMessage: audio.error.message});
-      isSpeaking = false;
-    };
-    speakPromise = Promise.resolve()
+    const urlPromise = Promise.resolve()
       .then(function() {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
         else return getAudioUrl(utterance, options.lang, options.voice, options.pitch);
       })
-      .then(function(url) {
-        audio.src = url;
-        return audio.play();
+    audio = playAudio(urlPromise, options)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true;
       })
       .catch(function(err) {
-        onEvent({
-          type: "error",
-          errorMessage: err.name == "NotAllowedError" ? JSON.stringify({code: "error_user_gesture_required"}) : err.message
-        })
+        onEvent({type: "error", error: err})
       })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
   };
   this.isSpeaking = function(callback) {
     callback(isSpeaking);
   };
   this.pause =
   this.stop = function() {
-    speakPromise.then(function() {audio.pause()});
+    audio.pause()
   };
   this.resume = function() {
-    audio.play();
+    return audio.resume()
   };
   this.prefetch = function(utterance, options) {
     getAudioUrl(utterance, options.lang, options.voice, options.pitch)
@@ -570,38 +530,50 @@ function AmazonPollyTtsEngine() {
   };
   this.setNextStartTime = function() {
   };
-  this.getVoices = function() {
-    return getSettings(["pollyVoices"])
-      .then(function(items) {
-        if (!items.pollyVoices || Date.now()-items.pollyVoices[0].ts > 24*3600*1000) updateVoices();
-        return items.pollyVoices || voices;
-      })
+  this.getVoices = async function() {
+    try {
+      const {awsCreds, pollyVoices} = await getSettings(["awsCreds", "pollyVoices"])
+      if (!awsCreds) return []
+      if (pollyVoices && pollyVoices.expire > Date.now()) return pollyVoices.list
+      const list = await fetchVoices()
+      await updateSettings({pollyVoices: {list, expire: Date.now() + 24*3600*1000}})
+      return list
+    }
+    catch (err) {
+      console.error(err)
+      return []
+    }
   }
-  function updateVoices() {
-    ajaxGet(config.serviceUrl + "/read-aloud/list-voices/amazon")
-      .then(JSON.parse)
-      .then(function(list) {
-        list[0].ts = Date.now();
-        updateSettings({pollyVoices: list});
-      })
+  async function fetchVoices() {
+    const polly = await getPolly()
+    const data = await polly.describeVoices().promise()
+    const voices = []
+    for (const voice of data.Voices) {
+      assert(voice.SupportedEngines && voice.Id)
+      if (voice.SupportedEngines.includes("standard")) voices.push(voice);
+      if (voice.SupportedEngines.includes("neural")) voices.push({...voice, Style: "neural"})
+      if (polly.newscasterVoices.includes(voice.Id)) voices.push({...voice, Style: "newscaster"})
+      if (polly.conversationalVoices.includes(voice.Id)) voices.push({...voice, Style: "conversational"})
+    }
+    return voices.map(voice => {
+      assert(voice.Gender)
+      let voiceName = `AmazonPolly ${voice.LanguageName} (${voice.Id})`;
+      if (voice.Style) voiceName += ` +${voice.Style}`;
+      return {
+        voiceName,
+        lang: voice.LanguageCode,
+        gender: voice.Gender.toLowerCase(),
+      }
+    })
   }
-  function getAudioUrl(text, lang, voice, pitch) {
-    assert(text && lang && voice && pitch != null);
+  async function getAudioUrl(text, lang, voice, pitch) {
+    assert(text && lang && voice);
     var matches = voice.voiceName.match(/^AmazonPolly .* \((\w+)\)( \+\w+)?$/);
     var voiceId = matches[1];
     var style = matches[2] && matches[2].substr(2);
-    return getPolly()
-      .then(function(polly) {
-        return polly.synthesizeSpeech(getOpts(text, voiceId, style))
-        .promise()
-      })
-      .then(function(data) {
-        var blob = new Blob([data.AudioStream], {type: data.ContentType});
-        return URL.createObjectURL(blob);
-      })
-  }
-  function getPolly() {
-    return pollyPromise || (pollyPromise = createPolly());
+    const polly = await getPolly()
+    const blob = await polly.synthesizeSpeech(getOpts(text, voiceId, style)).promise()
+    return URL.createObjectURL(blob);
   }
   function createPolly() {
     return getSettings(["awsCreds"])
@@ -647,171 +619,42 @@ function AmazonPollyTtsEngine() {
         }
     }
   }
-  function escapeXml(unsafe) {
-    return unsafe.replace(/[<>&'"]/g, function (c) {
-      switch (c) {
-          case '<': return '&lt;';
-          case '>': return '&gt;';
-          case '&': return '&amp;';
-          case '\'': return '&apos;';
-          case '"': return '&quot;';
-      }
-    })
-  }
-  var voices = [
-    {"voiceName":"AmazonPolly Turkish (Filiz)","lang":"tr-TR","gender":"female"},
-    {"voiceName":"AmazonPolly Swedish (Astrid)","lang":"sv-SE","gender":"female"},
-    {"voiceName":"AmazonPolly Russian (Tatyana)","lang":"ru-RU","gender":"female"},
-    {"voiceName":"AmazonPolly Russian (Maxim)","lang":"ru-RU","gender":"male"},
-    {"voiceName":"AmazonPolly Romanian (Carmen)","lang":"ro-RO","gender":"female"},
-    {"voiceName":"AmazonPolly Portuguese (Ines)","lang":"pt-PT","gender":"female"},
-    {"voiceName":"AmazonPolly Portuguese (Cristiano)","lang":"pt-PT","gender":"male"},
-    {"voiceName":"AmazonPolly Brazilian Portuguese (Vitoria)","lang":"pt-BR","gender":"female"},
-    {"voiceName":"AmazonPolly Brazilian Portuguese (Ricardo)","lang":"pt-BR","gender":"male"},
-    {"voiceName":"AmazonPolly Brazilian Portuguese (Camila) +neural","lang":"pt-BR","gender":"female"},
-    {"voiceName":"AmazonPolly Brazilian Portuguese (Camila)","lang":"pt-BR","gender":"female"},
-    {"voiceName":"AmazonPolly Polish (Maja)","lang":"pl-PL","gender":"female"},
-    {"voiceName":"AmazonPolly Polish (Jan)","lang":"pl-PL","gender":"male"},
-    {"voiceName":"AmazonPolly Polish (Jacek)","lang":"pl-PL","gender":"male"},
-    {"voiceName":"AmazonPolly Polish (Ewa)","lang":"pl-PL","gender":"female"},
-    {"voiceName":"AmazonPolly Dutch (Ruben)","lang":"nl-NL","gender":"male"},
-    {"voiceName":"AmazonPolly Dutch (Lotte)","lang":"nl-NL","gender":"female"},
-    {"voiceName":"AmazonPolly Norwegian (Liv)","lang":"nb-NO","gender":"female"},
-    {"voiceName":"AmazonPolly Korean (Seoyeon) +neural","lang":"ko-KR","gender":"female"},
-    {"voiceName":"AmazonPolly Korean (Seoyeon)","lang":"ko-KR","gender":"female"},
-    {"voiceName":"AmazonPolly Japanese (Takumi) +neural","lang":"ja-JP","gender":"male"},
-    {"voiceName":"AmazonPolly Japanese (Takumi)","lang":"ja-JP","gender":"male"},
-    {"voiceName":"AmazonPolly Japanese (Mizuki)","lang":"ja-JP","gender":"female"},
-    {"voiceName":"AmazonPolly Italian (Giorgio)","lang":"it-IT","gender":"male"},
-    {"voiceName":"AmazonPolly Italian (Carla)","lang":"it-IT","gender":"female"},
-    {"voiceName":"AmazonPolly Italian (Bianca) +neural","lang":"it-IT","gender":"female"},
-    {"voiceName":"AmazonPolly Italian (Bianca)","lang":"it-IT","gender":"female"},
-    {"voiceName":"AmazonPolly Icelandic (Karl)","lang":"is-IS","gender":"male"},
-    {"voiceName":"AmazonPolly Icelandic (Dora)","lang":"is-IS","gender":"female"},
-    {"voiceName":"AmazonPolly French (Mathieu)","lang":"fr-FR","gender":"male"},
-    {"voiceName":"AmazonPolly French (Lea) +neural","lang":"fr-FR","gender":"female"},
-    {"voiceName":"AmazonPolly French (Lea)","lang":"fr-FR","gender":"female"},
-    {"voiceName":"AmazonPolly French (Celine)","lang":"fr-FR","gender":"female"},
-    {"voiceName":"AmazonPolly Canadian French (Gabrielle) +neural","lang":"fr-CA","gender":"female"},
-    {"voiceName":"AmazonPolly Canadian French (Gabrielle)","lang":"fr-CA","gender":"female"},
-    {"voiceName":"AmazonPolly Canadian French (Chantal)","lang":"fr-CA","gender":"female"},
-    {"voiceName":"AmazonPolly US Spanish (Penelope)","lang":"es-US","gender":"female"},
-    {"voiceName":"AmazonPolly US Spanish (Miguel)","lang":"es-US","gender":"male"},
-    {"voiceName":"AmazonPolly US Spanish (Lupe) +newscaster","lang":"es-US","gender":"female"},
-    {"voiceName":"AmazonPolly US Spanish (Lupe) +neural","lang":"es-US","gender":"female"},
-    {"voiceName":"AmazonPolly US Spanish (Lupe)","lang":"es-US","gender":"female"},
-    {"voiceName":"AmazonPolly Mexican Spanish (Mia) +neural","lang":"es-MX","gender":"female"},
-    {"voiceName":"AmazonPolly Mexican Spanish (Mia)","lang":"es-MX","gender":"female"},
-    {"voiceName":"AmazonPolly Castilian Spanish (Lucia) +neural","lang":"es-ES","gender":"female"},
-    {"voiceName":"AmazonPolly Castilian Spanish (Lucia)","lang":"es-ES","gender":"female"},
-    {"voiceName":"AmazonPolly Castilian Spanish (Enrique)","lang":"es-ES","gender":"male"},
-    {"voiceName":"AmazonPolly Castilian Spanish (Conchita)","lang":"es-ES","gender":"female"},
-    {"voiceName":"AmazonPolly South African English (Ayanda) +neural","lang":"en-ZA","gender":"female"},
-    {"voiceName":"AmazonPolly South African English (Ayanda)","lang":"en-ZA","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Salli) +neural","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Salli)","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Matthew) +newscaster","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Matthew) +neural","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Matthew) +conversational","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Matthew)","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Kimberly) +neural","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Kimberly)","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Kevin) +neural","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Kevin)","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Kendra) +neural","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Kendra)","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Justin) +neural","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Justin)","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Joey) +neural","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Joey)","lang":"en-US","gender":"male"},
-    {"voiceName":"AmazonPolly US English (Joanna) +newscaster","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Joanna) +neural","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Joanna) +conversational","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Joanna)","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Ivy) +neural","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly US English (Ivy)","lang":"en-US","gender":"female"},
-    {"voiceName":"AmazonPolly New Zealand English (Aria) +neural","lang":"en-NZ","gender":"female"},
-    {"voiceName":"AmazonPolly New Zealand English (Aria)","lang":"en-NZ","gender":"female"},
-    {"voiceName":"AmazonPolly Indian English (Raveena)","lang":"en-IN","gender":"female"},
-    {"voiceName":"AmazonPolly Indian English (Aditi)","lang":"en-IN","gender":"female"},
-    {"voiceName":"AmazonPolly Welsh English (Geraint)","lang":"en-GB-WLS","gender":"male"},
-    {"voiceName":"AmazonPolly British English (Emma) +neural","lang":"en-GB","gender":"female"},
-    {"voiceName":"AmazonPolly British English (Emma)","lang":"en-GB","gender":"female"},
-    {"voiceName":"AmazonPolly British English (Brian) +neural","lang":"en-GB","gender":"male"},
-    {"voiceName":"AmazonPolly British English (Brian)","lang":"en-GB","gender":"male"},
-    {"voiceName":"AmazonPolly British English (Amy) +newscaster","lang":"en-GB","gender":"female"},
-    {"voiceName":"AmazonPolly British English (Amy) +neural","lang":"en-GB","gender":"female"},
-    {"voiceName":"AmazonPolly British English (Amy)","lang":"en-GB","gender":"female"},
-    {"voiceName":"AmazonPolly Australian English (Russell)","lang":"en-AU","gender":"male"},
-    {"voiceName":"AmazonPolly Australian English (Olivia) +neural","lang":"en-AU","gender":"female"},
-    {"voiceName":"AmazonPolly Australian English (Olivia)","lang":"en-AU","gender":"female"},
-    {"voiceName":"AmazonPolly Australian English (Nicole)","lang":"en-AU","gender":"female"},
-    {"voiceName":"AmazonPolly German (Vicki) +neural","lang":"de-DE","gender":"female"},
-    {"voiceName":"AmazonPolly German (Vicki)","lang":"de-DE","gender":"female"},
-    {"voiceName":"AmazonPolly German (Marlene)","lang":"de-DE","gender":"female"},
-    {"voiceName":"AmazonPolly German (Hans)","lang":"de-DE","gender":"male"},
-    {"voiceName":"AmazonPolly German (Hannah) +neural","lang":"de-AT","gender":"female"},
-    {"voiceName":"AmazonPolly German (Hannah)","lang":"de-AT","gender":"female"},
-    {"voiceName":"AmazonPolly Danish (Naja)","lang":"da-DK","gender":"female"},
-    {"voiceName":"AmazonPolly Danish (Mads)","lang":"da-DK","gender":"male"},
-    {"voiceName":"AmazonPolly Welsh (Gwyneth)","lang":"cy-GB","gender":"female"},
-    {"voiceName":"AmazonPolly Chinese Mandarin (Zhiyu)","lang":"cmn-CN","gender":"female"},
-    {"voiceName":"AmazonPolly Catalan (Arlet) +neural","lang":"ca-ES","gender":"female"},
-    {"voiceName":"AmazonPolly Catalan (Arlet)","lang":"ca-ES","gender":"female"},
-    {"voiceName":"AmazonPolly Arabic (Zeina)","lang":"arb","gender":"female"}
-  ]
 }
 
 
 function GoogleWavenetTtsEngine() {
-  var audio = document.createElement("AUDIO");
   var prefetchAudio;
   var isSpeaking = false;
-  var speakPromise;
+  var audio;
   this.speak = function(utterance, options, onEvent) {
-    if (!options.volume) options.volume = 1;
-    if (!options.rate) options.rate = 1;
-    if (!options.pitch) options.pitch = 1;
-    audio.pause();
-    audio.volume = options.volume;
-    audio.defaultPlaybackRate = options.rate;
-    audio.onplay = function() {
-      onEvent({type: 'start', charIndex: 0});
-      isSpeaking = true;
-    };
-    audio.onended = function() {
-      onEvent({type: 'end', charIndex: utterance.length});
-      isSpeaking = false;
-    };
-    audio.onerror = function() {
-      onEvent({type: "error", errorMessage: audio.error.message});
-      isSpeaking = false;
-    };
-    speakPromise = Promise.resolve()
+    const urlPromise = Promise.resolve()
       .then(function() {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
         else return getAudioUrl(utterance, options.voice, options.pitch);
       })
-      .then(function(url) {
-        audio.src = url;
-        return audio.play();
+    audio = playAudio(urlPromise, options)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true;
       })
       .catch(function(err) {
-        onEvent({
-          type: "error",
-          errorMessage: err.name == "NotAllowedError" ? JSON.stringify({code: "error_user_gesture_required"}) : err.message
-        })
+        onEvent({type: "error", error: err})
       })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
   };
   this.isSpeaking = function(callback) {
     callback(isSpeaking);
   };
   this.pause =
   this.stop = function() {
-    speakPromise.then(function() {audio.pause()});
+    audio.pause()
   };
   this.resume = function() {
-    audio.play();
+    return audio.resume()
   };
   this.prefetch = function(utterance, options) {
     getAudioUrl(utterance, options.voice, options.pitch)
@@ -823,10 +666,16 @@ function GoogleWavenetTtsEngine() {
   this.setNextStartTime = function() {
   };
   this.getVoices = function() {
-    return getSettings(["wavenetVoices"])
+    return getSettings(["wavenetVoices", "gcpCreds"])
       .then(function(items) {
         if (!items.wavenetVoices || Date.now()-items.wavenetVoices[0].ts > 24*3600*1000) updateVoices();
-        return items.wavenetVoices || voices;
+        var listvoices = items.wavenetVoices || voices;
+        var creds = items.gcpCreds;
+        return listvoices.filter(
+          function(voice) {
+            // include all voices or exclude only studio voices.
+            return ((creds && creds.enableStudio) || !isGoogleStudio(voice));
+          });
       })
   }
   this.getFreeVoices = function() {
@@ -846,7 +695,7 @@ function GoogleWavenetTtsEngine() {
       })
   }
   function getAudioUrl(text, voice, pitch) {
-    assert(text && voice && pitch != null);
+    assert(text && voice);
     var matches = voice.voiceName.match(/^Google(\w+) .* \((\w+)\)$/);
     var voiceName = voice.lang + "-" + matches[1] + "-" + matches[2][0];
     var endpoint = matches[1] == "Neural2" ? "us-central1-texttospeech.googleapis.com" : "texttospeech.googleapis.com";
@@ -862,7 +711,7 @@ function GoogleWavenetTtsEngine() {
           },
           audioConfig: {
             audioEncoding: "OGG_OPUS",
-            pitch: (pitch-1)*20
+            pitch: ((pitch || 1) -1) *20
           }
         }
         if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json");
@@ -879,105 +728,6 @@ function GoogleWavenetTtsEngine() {
       })
   }
   var voices = [
-    {"voiceName":"GoogleWavenet Arabic (Anna)","lang":"ar-XA","gender":"female"},
-    {"voiceName":"GoogleWavenet Arabic (Benjamin)","lang":"ar-XA","gender":"male"},
-    {"voiceName":"GoogleWavenet Arabic (Christopher)","lang":"ar-XA","gender":"male"},
-    {"voiceName":"GoogleWavenet Mandarin (Anna)","lang":"cmn-CN","gender":"female"},
-    {"voiceName":"GoogleWavenet Mandarin (Benjamin)","lang":"cmn-CN","gender":"male"},
-    {"voiceName":"GoogleWavenet Mandarin (Christopher)","lang":"cmn-CN","gender":"male"},
-    {"voiceName":"GoogleWavenet Mandarin (Diane)","lang":"cmn-CN","gender":"female"},
-    {"voiceName":"GoogleWavenet Czech (Anna)","lang":"cs-CZ","gender":"female"},
-    {"voiceName":"GoogleWavenet Danish (Anna)","lang":"da-DK","gender":"female"},
-    {"voiceName":"GoogleWavenet German (Anna)","lang":"de-DE","gender":"female"},
-    {"voiceName":"GoogleWavenet German (Benjamin)","lang":"de-DE","gender":"male"},
-    {"voiceName":"GoogleWavenet German (Caroline)","lang":"de-DE","gender":"female"},
-    {"voiceName":"GoogleWavenet German (Daniel)","lang":"de-DE","gender":"male"},
-    {"voiceName":"GoogleWavenet German (Ethan)","lang":"de-DE","gender":"male"},
-    {"voiceName":"GoogleWavenet Greek, Modern (Anna)","lang":"el-GR","gender":"female"},
-    {"voiceName":"GoogleWavenet Australian English (Anna)","lang":"en-AU","gender":"female"},
-    {"voiceName":"GoogleWavenet Australian English (Benjamin)","lang":"en-AU","gender":"male"},
-    {"voiceName":"GoogleWavenet Australian English (Caroline)","lang":"en-AU","gender":"female"},
-    {"voiceName":"GoogleWavenet Australian English (Daniel)","lang":"en-AU","gender":"male"},
-    {"voiceName":"GoogleWavenet British English (Anna)","lang":"en-GB","gender":"female"},
-    {"voiceName":"GoogleWavenet British English (Benjamin)","lang":"en-GB","gender":"male"},
-    {"voiceName":"GoogleWavenet British English (Caroline)","lang":"en-GB","gender":"female"},
-    {"voiceName":"GoogleWavenet British English (Daniel)","lang":"en-GB","gender":"male"},
-    {"voiceName":"GoogleWavenet Indian English (Anna)","lang":"en-IN","gender":"female"},
-    {"voiceName":"GoogleWavenet Indian English (Benjamin)","lang":"en-IN","gender":"male"},
-    {"voiceName":"GoogleWavenet Indian English (Christopher)","lang":"en-IN","gender":"male"},
-    {"voiceName":"GoogleWavenet US English (Adam)","lang":"en-US","gender":"male"},
-    {"voiceName":"GoogleWavenet US English (Benjamin)","lang":"en-US","gender":"male"},
-    {"voiceName":"GoogleWavenet US English (Caroline)","lang":"en-US","gender":"female"},
-    {"voiceName":"GoogleWavenet US English (Daniel)","lang":"en-US","gender":"male"},
-    {"voiceName":"GoogleWavenet US English (Elizabeth)","lang":"en-US","gender":"female"},
-    {"voiceName":"GoogleWavenet US English (Francesca)","lang":"en-US","gender":"female"},
-    {"voiceName":"GoogleWavenet Finnish (Anna)","lang":"fi-FI","gender":"female"},
-    {"voiceName":"GoogleWavenet Filipino (Anna)","lang":"fil-PH","gender":"female"},
-    {"voiceName":"GoogleWavenet Canadian French (Anna)","lang":"fr-CA","gender":"female"},
-    {"voiceName":"GoogleWavenet Canadian French (Benjamin)","lang":"fr-CA","gender":"male"},
-    {"voiceName":"GoogleWavenet Canadian French (Caroline)","lang":"fr-CA","gender":"female"},
-    {"voiceName":"GoogleWavenet Canadian French (Daniel)","lang":"fr-CA","gender":"male"},
-    {"voiceName":"GoogleWavenet French (Anna)","lang":"fr-FR","gender":"female"},
-    {"voiceName":"GoogleWavenet French (Benjamin)","lang":"fr-FR","gender":"male"},
-    {"voiceName":"GoogleWavenet French (Caroline)","lang":"fr-FR","gender":"female"},
-    {"voiceName":"GoogleWavenet French (Daniel)","lang":"fr-FR","gender":"male"},
-    {"voiceName":"GoogleWavenet French (Elizabeth)","lang":"fr-FR","gender":"female"},
-    {"voiceName":"GoogleWavenet Hindi (Anna)","lang":"hi-IN","gender":"female"},
-    {"voiceName":"GoogleWavenet Hindi (Benjamin)","lang":"hi-IN","gender":"male"},
-    {"voiceName":"GoogleWavenet Hindi (Christopher)","lang":"hi-IN","gender":"male"},
-    {"voiceName":"GoogleWavenet Hungarian (Anna)","lang":"hu-HU","gender":"female"},
-    {"voiceName":"GoogleWavenet Indonesian (Anna)","lang":"id-ID","gender":"female"},
-    {"voiceName":"GoogleWavenet Indonesian (Benjamin)","lang":"id-ID","gender":"male"},
-    {"voiceName":"GoogleWavenet Indonesian (Christopher)","lang":"id-ID","gender":"male"},
-    {"voiceName":"GoogleWavenet Italian (Anna)","lang":"it-IT","gender":"female"},
-    {"voiceName":"GoogleWavenet Italian (Bianca)","lang":"it-IT","gender":"female"},
-    {"voiceName":"GoogleWavenet Italian (Christopher)","lang":"it-IT","gender":"male"},
-    {"voiceName":"GoogleWavenet Italian (Daniel)","lang":"it-IT","gender":"male"},
-    {"voiceName":"GoogleWavenet Japanese (Anna)","lang":"ja-JP","gender":"female"},
-    {"voiceName":"GoogleWavenet Japanese (Bianca)","lang":"ja-JP","gender":"female"},
-    {"voiceName":"GoogleWavenet Japanese (Christopher)","lang":"ja-JP","gender":"male"},
-    {"voiceName":"GoogleWavenet Japanese (Daniel)","lang":"ja-JP","gender":"male"},
-    {"voiceName":"GoogleWavenet Korean (Bianca)","lang":"ko-KR","gender":"female"},
-    {"voiceName":"GoogleWavenet Korean (Christopher)","lang":"ko-KR","gender":"male"},
-    {"voiceName":"GoogleWavenet Korean (Daniel)","lang":"ko-KR","gender":"male"},
-    {"voiceName":"GoogleWavenet Korean (Anna)","lang":"ko-KR","gender":"female"},
-    {"voiceName":"GoogleWavenet Norwegian Bokmål (Elizabeth)","lang":"nb-NO","gender":"female"},
-    {"voiceName":"GoogleWavenet Norwegian Bokmål (Anna)","lang":"nb-NO","gender":"female"},
-    {"voiceName":"GoogleWavenet Norwegian Bokmål (Benjamin)","lang":"nb-NO","gender":"male"},
-    {"voiceName":"GoogleWavenet Norwegian Bokmål (Caroline)","lang":"nb-NO","gender":"female"},
-    {"voiceName":"GoogleWavenet Norwegian Bokmål (Daniel)","lang":"nb-NO","gender":"male"},
-    {"voiceName":"GoogleWavenet Dutch (Benjamin)","lang":"nl-NL","gender":"male"},
-    {"voiceName":"GoogleWavenet Dutch (Christopher)","lang":"nl-NL","gender":"male"},
-    {"voiceName":"GoogleWavenet Dutch (Diane)","lang":"nl-NL","gender":"female"},
-    {"voiceName":"GoogleWavenet Dutch (Elizabeth)","lang":"nl-NL","gender":"female"},
-    {"voiceName":"GoogleWavenet Dutch (Anna)","lang":"nl-NL","gender":"female"},
-    {"voiceName":"GoogleWavenet Polish (Anna)","lang":"pl-PL","gender":"female"},
-    {"voiceName":"GoogleWavenet Polish (Benjamin)","lang":"pl-PL","gender":"male"},
-    {"voiceName":"GoogleWavenet Polish (Christopher)","lang":"pl-PL","gender":"male"},
-    {"voiceName":"GoogleWavenet Polish (Diane)","lang":"pl-PL","gender":"female"},
-    {"voiceName":"GoogleWavenet Polish (Elizabeth)","lang":"pl-PL","gender":"female"},
-    {"voiceName":"GoogleWavenet Brazilian Portuguese (Anna)","lang":"pt-BR","gender":"female"},
-    {"voiceName":"GoogleWavenet Portuguese (Anna)","lang":"pt-PT","gender":"female"},
-    {"voiceName":"GoogleWavenet Portuguese (Benjamin)","lang":"pt-PT","gender":"male"},
-    {"voiceName":"GoogleWavenet Portuguese (Christopher)","lang":"pt-PT","gender":"male"},
-    {"voiceName":"GoogleWavenet Portuguese (Diane)","lang":"pt-PT","gender":"female"},
-    {"voiceName":"GoogleWavenet Russian (Elizabeth)","lang":"ru-RU","gender":"female"},
-    {"voiceName":"GoogleWavenet Russian (Anna)","lang":"ru-RU","gender":"female"},
-    {"voiceName":"GoogleWavenet Russian (Benjamin)","lang":"ru-RU","gender":"male"},
-    {"voiceName":"GoogleWavenet Russian (Caroline)","lang":"ru-RU","gender":"female"},
-    {"voiceName":"GoogleWavenet Russian (Daniel)","lang":"ru-RU","gender":"male"},
-    {"voiceName":"GoogleWavenet Slovak (Anna)","lang":"sk-SK","gender":"female"},
-    {"voiceName":"GoogleWavenet Swedish (Anna)","lang":"sv-SE","gender":"female"},
-    {"voiceName":"GoogleWavenet Turkish (Anna)","lang":"tr-TR","gender":"female"},
-    {"voiceName":"GoogleWavenet Turkish (Benjamin)","lang":"tr-TR","gender":"male"},
-    {"voiceName":"GoogleWavenet Turkish (Caroline)","lang":"tr-TR","gender":"female"},
-    {"voiceName":"GoogleWavenet Turkish (Diane)","lang":"tr-TR","gender":"female"},
-    {"voiceName":"GoogleWavenet Turkish (Ethan)","lang":"tr-TR","gender":"male"},
-    {"voiceName":"GoogleWavenet Ukrainian (Anna)","lang":"uk-UA","gender":"female"},
-    {"voiceName":"GoogleWavenet Vietnamese (Anna)","lang":"vi-VN","gender":"female"},
-    {"voiceName":"GoogleWavenet Vietnamese (Benjamin)","lang":"vi-VN","gender":"male"},
-    {"voiceName":"GoogleWavenet Vietnamese (Caroline)","lang":"vi-VN","gender":"female"},
-    {"voiceName":"GoogleWavenet Vietnamese (Daniel)","lang":"vi-VN","gender":"male"},
     {"voiceName":"GoogleStandard Spanish; Castilian (Anna)","lang":"es-ES","gender":"female"},
     {"voiceName":"GoogleStandard Arabic (Anna)","lang":"ar-XA","gender":"female"},
     {"voiceName":"GoogleStandard Arabic (Benjamin)","lang":"ar-XA","gender":"male"},
@@ -1074,57 +824,52 @@ function GoogleWavenetTtsEngine() {
     {"voiceName":"GoogleStandard French (Daniel)","lang":"fr-FR","gender":"male"},
     {"voiceName":"GoogleStandard Italian (Bianca)","lang":"it-IT","gender":"female"},
     {"voiceName":"GoogleStandard Italian (Christopher)","lang":"it-IT","gender":"male"},
-    {"voiceName":"GoogleStandard Italian (Daniel)","lang":"it-IT","gender":"male"}
+    {"voiceName":"GoogleStandard Italian (Daniel)","lang":"it-IT","gender":"male"},
   ]
 }
 
 
 function IbmWatsonTtsEngine() {
-  var audio = document.createElement("AUDIO");
   var isSpeaking = false;
-  var speakPromise;
+  var audio, prefetchAudio;
   this.speak = function(utterance, options, onEvent) {
-    if (!options.volume) options.volume = 1;
-    if (!options.rate) options.rate = 1;
-    if (!options.pitch) options.pitch = 1;
-    audio.pause();
-    audio.volume = options.volume;
-    audio.defaultPlaybackRate = options.rate * 1.1;
-    audio.onplay = function() {
-      onEvent({type: 'start', charIndex: 0});
-      isSpeaking = true;
-    };
-    audio.onended = function() {
-      onEvent({type: 'end', charIndex: utterance.length});
-      isSpeaking = false;
-    };
-    audio.onerror = function() {
-      onEvent({type: "error", errorMessage: audio.error.message});
-      isSpeaking = false;
-    };
-    speakPromise = getAudioUrl(utterance, options.voice)
-      .then(function(url) {
-        audio.src = url;
-        return audio.play();
+    const urlPromise = Promise.resolve()
+      .then(() => {
+        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
+        else return getAudioUrl(utterance, options.voice)
+      })
+    audio = playAudio(urlPromise, options)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true;
       })
       .catch(function(err) {
-        onEvent({
-          type: "error",
-          errorMessage: err.name == "NotAllowedError" ? JSON.stringify({code: "error_user_gesture_required"}) : err.message
-        })
+        onEvent({type: "error", error: err})
       })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
   };
   this.isSpeaking = function(callback) {
     callback(isSpeaking);
   };
   this.pause =
   this.stop = function() {
-    speakPromise.then(function() {audio.pause()});
+    audio.pause()
   };
   this.resume = function() {
-    audio.play();
+    return audio.resume()
   };
-  this.prefetch = function(utterance, options) {
+  this.prefetch = async function(utterance, options) {
+    try {
+      const url = await getAudioUrl(utterance, options.voice)
+      prefetchAudio = [utterance, options, url]
+    }
+    catch (err) {
+      console.error(err)
+    }
   };
   this.setNextStartTime = function() {
   };
@@ -1183,5 +928,473 @@ function IbmWatsonTtsEngine() {
           }
         })
       })
+  }
+}
+
+
+function NvidiaRivaTtsEngine() {
+  const RIVA_VOICE_PREFIX = "Nvidia-Riva "
+  var prefetchAudio;
+  var isSpeaking = false;
+  var audio;
+  this.speak = function(utterance, options, onEvent) {
+    const urlPromise = Promise.resolve()
+      .then(function() {
+        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
+        else return getAudioUrl(utterance, options.voice, options.pitch, options.rate);
+      })
+    // Rate supplied to player is always 1 because it is already represented in the generated audio
+    audio = playAudio(urlPromise, {...options, rate: 1})
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true;
+      })
+      .catch(function(err) {
+        onEvent({type: "error", error: err})
+      })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
+  };
+  this.isSpeaking = function(callback) {
+    callback(isSpeaking);
+  };
+  this.pause =
+  this.stop = function() {
+    audio.pause()
+  };
+  this.resume = function() {
+    return audio.resume()
+  };
+  this.prefetch = function(utterance, options) {
+    getAudioUrl(utterance, options.voice, options.pitch, options.rate)
+      .then(function(url) {
+        prefetchAudio = [utterance, options, url];
+      })
+      .catch(console.error)
+  };
+  this.setNextStartTime = function() {
+  };
+  this.getVoices = function() {
+    return getSettings(["rivaVoices", "rivaCreds"])
+      .then(function(items) {
+        if (!items.rivaCreds) return [];
+        if (items.rivaVoices && Date.now()-items.rivaVoices[0].ts < 24*3600*1000) return items.rivaVoices;
+        return fetchVoices(items.rivaCreds.url)
+          .then(function(list) {
+            list[0].ts = Date.now();
+            updateSettings({rivaVoices: list}).catch(console.error);
+            return list;
+          })
+          .catch(function(err) {
+            console.error(err);
+            return [];
+          })
+      })
+  }
+  async function getAudioUrl(text, voice, pitch, rate) {
+    assert(text && voice);
+    const settings = await getSettings(["rivaCreds"])
+    const res = await fetch(settings.rivaCreds.url + "/tts", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "audio/ogg;codecs=opus"
+      },
+      body: JSON.stringify({
+        voice: voice.voiceName.replace(RIVA_VOICE_PREFIX,''),
+        text: escapeHtml(text),
+        pitch,
+        rate
+      })
+    })
+    if (!res.ok) throw new Error("Server returns " + res.status)
+    const blob = await res.blob()
+    return URL.createObjectURL(blob);
+  }
+  this.fetchVoices = fetchVoices;
+  function fetchVoices(url) {
+    return ajaxGet({ url: url + "/voices" }).then(JSON.parse).then((voices)=>{
+      return voices.map((v)=>({...v, voiceName:RIVA_VOICE_PREFIX+v.voiceName}))
+    })
+  }
+}
+
+
+function PhoneTtsEngine() {
+  var isSpeaking = false
+  var conn
+  const pendingRequests = new Map()
+  const getPairingCode = lazy(() => 100000 + Math.floor(Math.random() * 900000))
+  const getPeer = lazy(async () => {
+    const peer = new Peer("readaloud-" + getPairingCode(), {debug: 2})
+    await new Promise((f,r) => peer.once("open", f).once("error", r))
+    peer.on("connection", newConn => {
+      const makeError = reason => new Error(JSON.stringify({code: "error_phone_disconnected", reason}))
+      newConn.readyPromise = new Promise((fulfill, reject) => {
+        newConn.once("open", fulfill)
+          .once("error", err => reject(makeError(err.message || err)))
+      })
+      newConn.once("close", () => newConn.readyPromise = Promise.reject(makeError("Connection lost")))
+      newConn.on("error", console.error)
+      newConn.on("data", res => {
+        const pending = pendingRequests.get(res.id)
+        if (pending) {
+          if (res.error) pending.reject(new Error(res.error))
+          else pending.fulfill(res.value)
+        }
+        else {
+          console.warn("Response received but no pending request", res)
+        }
+      })
+      newConn.peerConnection.addEventListener("connectionstatechange", () => {
+        //https://bugs.chromium.org/p/chromium/issues/detail?id=982793#c15
+        if (newConn.peerConnection.connectionState == "failed") newConn.close()
+      })
+      if (conn) conn.close()
+      conn = newConn
+    })
+    window.addEventListener("beforeunload", () => peer.destroy())
+    return peer
+  })
+  this.startPairing = async function() {
+    if (conn) {
+      conn.close()
+      conn = null
+    }
+    const peer = await getPeer()
+    if (peer.disconnected) peer.reconnect()
+    return getPairingCode()
+  }
+  this.isPaired = async function() {
+    return conn != null
+  }
+  async function sendRequest(req, timeout) {
+    req.id = String(Math.random())
+    await conn.readyPromise
+    conn.send(req)
+    const responsePromise = new Promise((fulfill, reject) => pendingRequests.set(req.id, {fulfill, reject}))
+    try {
+      return await promiseTimeout(timeout || 5000, "Request timed out", responsePromise)
+    }
+    catch(err) {
+      if (err.message == "Request timed out") {
+        console.warn("Request timed out, assuming phone connection lost")
+        conn.close()
+      }
+      throw err
+    }
+    finally {
+      pendingRequests.delete(req.id)
+    }
+  }
+  this.speak = function(text, options, onEvent) {
+    if (!conn) {
+      onEvent({type: "error", error: new Error(JSON.stringify({code: "error_phone_not_connected"}))})
+      return
+    }
+    sendRequest({
+        method: "speak",
+        text,
+        options: {
+          lang: options.lang,
+          rate: options.rate,
+          pitch: options.pitch,
+          volume: options.volume
+        }
+      })
+      .then(({speechId}) => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true
+        sendRequest({method: "waitFinish", speechId}, 3*60*1000)
+          .then(() => onEvent({type: "end", charIndex: text.length}),
+            err => {
+              if (err.message != "interrupted") onEvent({type: "error", error: err})
+            })
+          .finally(() => isSpeaking = false)
+      })
+      .catch(err => {
+        if (err.message != "canceled") onEvent({type: "error", error: err})
+      })
+  }
+  this.stop = function() {
+    if (!conn) return;
+    sendRequest({method: "stop"}).catch(console.error)
+  }
+  this.pause = function() {
+    sendRequest({method: "pause"}).catch(console.error)
+  }
+  this.resume = function() {
+    sendRequest({method: "resume"}).catch(console.error)
+  }
+  this.isSpeaking = function(callback) {
+    callback(isSpeaking)
+  }
+  this.getVoices = function() {
+    return [
+      {voiceName: "Use My Phone", remote: false, isUseMyPhone: true},
+    ]
+  }
+}
+
+
+function OpenaiTtsEngine() {
+  var audio, prefetchAudio
+  var isSpeaking = false
+  this.speak = function(utterance, options, onEvent) {
+    const urlPromise = Promise.resolve()
+      .then(() => {
+        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
+        else return getAudioUrl(utterance, options.voice, options.pitch)
+      })
+    audio = playAudio(urlPromise, options)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true
+      })
+      .catch(err => {
+        onEvent({type: "error", error: err})
+      })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
+  }
+  this.isSpeaking = function(callback) {
+    callback(isSpeaking)
+  }
+  this.pause =
+  this.stop = function() {
+    audio.pause()
+  }
+  this.resume = function() {
+    return audio.resume()
+  }
+  this.prefetch = async function(utterance, options) {
+    try {
+      const url = await getAudioUrl(utterance, options.voice, options.pitch)
+      prefetchAudio = [utterance, options, url]
+    }
+    catch (err) {
+      console.error(err)
+    }
+  }
+  this.setNextStartTime = function() {
+  }
+  this.getVoices = function() {
+    return voices
+  }
+  async function getAudioUrl(text, voice, pitch) {
+    assert(text && voice)
+    const matches = voice.voiceName.match(/^ChatGPT .* \((\w+)\)$/)
+    const voiceName = matches[1]
+    const {openaiCreds} = await getSettings(["openaiCreds"])
+    const res = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + openaiCreds.apiKey
+      },
+      body: JSON.stringify({
+        model: "tts-1",
+        input: text,
+        voice: voiceName,
+        response_format: "opus",
+      })
+    })
+    if (!res.ok) throw await res.json().then(x => x.error)
+    return URL.createObjectURL(await res.blob())
+  }
+  const voices = [
+    {"voiceName":"ChatGPT English (alloy)","lang":"en-US","gender":"female"},
+    {"voiceName":"ChatGPT English (echo)","lang":"en-US","gender":"male"},
+    {"voiceName":"ChatGPT English (fable)","lang":"en-US","gender":"female"},
+    {"voiceName":"ChatGPT English (onyx)","lang":"en-US","gender":"male"},
+    {"voiceName":"ChatGPT English (nova)","lang":"en-US","gender":"female"},
+    {"voiceName":"ChatGPT English (shimmer)","lang":"en-US","gender":"female"},
+  ]
+}
+
+
+function AzureTtsEngine() {
+  var isSpeaking = false;
+  var audio, prefetchAudio;
+  this.speak = function(utterance, options, onEvent) {
+    const urlPromise = Promise.resolve()
+      .then(() => {
+        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
+        else return getAudioUrl(utterance, options.lang, options.voice)
+      })
+    audio = playAudio(urlPromise, options)
+    audio.startPromise
+      .then(() => {
+        onEvent({type: "start", charIndex: 0})
+        isSpeaking = true;
+      })
+      .catch(function(err) {
+        onEvent({type: "error", error: err})
+      })
+    audio.endPromise
+      .then(() => onEvent({type: "end", charIndex: utterance.length}),
+        err => onEvent({type: "error", error: err}))
+      .finally(() => isSpeaking = false)
+  };
+  this.isSpeaking = function(callback) {
+    callback(isSpeaking);
+  };
+  this.pause =
+  this.stop = function() {
+    audio.pause()
+  };
+  this.resume = function() {
+    return audio.resume()
+  };
+  this.prefetch = async function(utterance, options) {
+    try {
+      const url = await getAudioUrl(utterance, options.lang, options.voice)
+      prefetchAudio = [utterance, options, url]
+    }
+    catch (err) {
+      console.error(err)
+    }
+  };
+  this.setNextStartTime = function() {
+  };
+  this.getVoices = async function() {
+    try {
+      const {azureCreds, azureVoices} = await getSettings(["azureCreds", "azureVoices"])
+      if (!azureCreds) return []
+      if (azureVoices && azureVoices.expire > Date.now()) return azureVoices.list
+      const list = await this.fetchVoices(azureCreds.region, azureCreds.key)
+      await updateSettings({azureVoices: {list, expire: Date.now() + 24*3600*1000}})
+      return list
+    }
+    catch (err) {
+      console.error(err)
+      return []
+    }
+  }
+  this.fetchVoices = async function(region, key) {
+    const res = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/voices/list`, {
+      method: "GET",
+      headers: {
+        "Ocp-Apim-Subscription-Key": key,
+      }
+    })
+    if (!res.ok) throw new Error("Server return " + res.status)
+    const voices = await res.json()
+    return voices.map(item => {
+      const name = item.ShortName.split("-")[2]
+      return {
+        voiceName: "Azure " + item.LocaleName + " - " + name,
+        lang: item.Locale,
+        gender: item.Gender == "Male" ? "male" : "female",
+      }
+    })
+  }
+  async function getAudioUrl(text, lang, voice) {
+    const matches = voice.voiceName.match(/^Azure .* - (\w+)$/)
+    const voiceName = voice.lang + "-" + matches[1]
+    const {azureCreds} = await getSettings(["azureCreds"])
+    const {region, key} = azureCreds
+    const res = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+      method: "POST",
+      headers: {
+        "Ocp-Apim-Subscription-Key": key,
+        "Content-Type": "application/ssml+xml",
+        "X-Microsoft-OutputFormat": "ogg-48khz-16bit-mono-opus",
+      },
+      body: `<speak version='1.0' xml:lang='${lang}'><voice name='${voiceName}'>${escapeXml(text)}</voice></speak>`
+    })
+    if (!res.ok) throw new Error("Server return " + res.status)
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
+  }
+}
+
+
+function PiperTtsEngine() {
+  let control = null
+  let isSpeaking = false
+  this.speak = function(utterance, options, onEvent) {
+    const piperPromise = rxjs.firstValueFrom(piperObservable)
+    control = new rxjs.Subject()
+    control
+      .pipe(
+        rxjs.startWith("speak"),
+        rxjs.concatMap(async cmd => {
+          const piper = await piperPromise
+          switch (typeof cmd == "string" ? cmd : cmd.type) {
+            case "speak":
+              return piper.sendRequest("speak", {
+                utterance,
+                voiceName: options.voice.voiceName,
+                pitch: options.pitch,
+                rate: options.rate,
+                volume: options.volume,
+              })
+            case "pause":
+              return piper.sendRequest("pause")
+            case "resume":
+              return piper.sendRequest("resume")
+            case "stop":
+              return piper.sendRequest("stop")
+                .then(() => Promise.reject({name: "interrupted", message: "Playback interrupted"}))
+            case "forward":
+              return piper.sendRequest("forward")
+            case "rewind":
+              return piper.sendRequest("rewind")
+            case "seek":
+              return piper.sendRequest("seek", {index: cmd.index})
+          }
+        }),
+        rxjs.ignoreElements(),
+        rxjs.mergeWith(piperCallbacks),
+        rxjs.map(event => {
+          if (event.type == "error") throw event.error
+          return event
+        }),
+        rxjs.takeWhile(event => event.type != "end")
+      )
+      .subscribe({
+        next(event) {
+          if (event.type == "start") isSpeaking = true
+          onEvent(event)
+        },
+        complete() {
+          onEvent({type: "end"})
+        },
+        error(err) {
+          if (err.name != "interrupted") onEvent({type: "error", error: err})
+        }
+      })
+      .add(() => {
+        isSpeaking = false
+        control = null
+      })
+  }
+  this.isSpeaking = function(callback) {
+    callback(isSpeaking)
+  }
+  this.pause = function() {
+    control?.next("pause")
+  }
+  this.resume = function() {
+    control?.next("resume")
+  }
+  this.stop = function() {
+    control?.next("stop")
+  }
+  this.forward = function() {
+    control?.next("forward")
+  }
+  this.rewind = function() {
+    control?.next("rewind")
+  }
+  this.seek = function(index) {
+    control?.next({type: "seek", index})
   }
 }

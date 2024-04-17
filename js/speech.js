@@ -3,40 +3,53 @@ function Speech(texts, options) {
   options.rate = (options.rate || 1) * (isGoogleNative(options.voice) ? 0.9 : 1);
 
   for (var i=0; i<texts.length; i++) if (/[\w)]$/.test(texts[i])) texts[i] += '.';
+  if (texts.length) texts = getChunks(texts.join("\n\n"));
 
   var self = this;
-  var engine;
+  const engine = pickEngine()
   var pauseDuration = 650/options.rate;
   var state = "IDLE";
-  var index = 0;
+  let sentenceStartIndicies
+  const position = immediate(() => {
+    let index = 0
+    let word
+    return {
+      getIndex() {
+        return index
+      },
+      setIndex(value) {
+        index = value
+        word = null
+      },
+      getWord() {
+        return word
+      },
+      setWord(value) {
+        word = value
+      }
+    }
+  })
   var delayedPlayTimer;
-  var ready = Promise.resolve(pickEngine())
-    .then(function(x) {
-      engine = x;
-      if (texts.length) texts = getChunks(texts.join("\n\n"));
-    })
 
   this.options = options;
   this.play = play;
   this.pause = pause;
   this.stop = stop;
   this.getState = getState;
-  this.getPosition = getPosition;
+  this.getInfo = getInfo;
   this.forward = forward;
   this.rewind = rewind;
   this.seek = seek;
   this.gotoEnd = gotoEnd;
 
   function pickEngine() {
+    if (isPiperVoice(options.voice)) return piperTtsEngine;
+    if (isAzure(options.voice)) return azureTtsEngine;
+    if (isOpenai(options.voice)) return openaiTtsEngine;
+    if (isUseMyPhone(options.voice)) return phoneTtsEngine;
+    if (isNvidiaRiva(options.voice)) return nvidiaRivaTtsEngine;
     if (isGoogleTranslate(options.voice) && !/\s(Hebrew|Telugu)$/.test(options.voice.voiceName)) {
-      return googleTranslateTtsEngine.ready()
-        .then(function() {return googleTranslateTtsEngine})
-        .catch(function(err) {
-          console.warn("GoogleTranslate unavailable,", err);
-          options.voice.autoSelect = true;
-          options.voice.voiceName = "Microsoft US English (Zira)";
-          return remoteTtsEngine;
-        })
+      return googleTranslateTtsEngine
     }
     if (isAmazonPolly(options.voice)) return amazonPollyTtsEngine;
     if (isGoogleWavenet(options.voice)) return googleWavenetTtsEngine;
@@ -50,11 +63,12 @@ function Speech(texts, options) {
     var isEA = /^zh|ko|ja/.test(options.lang);
     var punctuator = isEA ? new EastAsianPunctuator() : new LatinPunctuator();
     if (isGoogleNative(options.voice)) {
-      var wordLimit = (/^(de|ru|es|id)/.test(options.lang) ? 32 : 36) * (isEA ? 2 : 1) * options.rate;
+      var wordLimit = (/^(de|ru|es|pt|id)/.test(options.lang) ? 32 : 36) * (isEA ? 2 : 1) * options.rate;
       return new WordBreaker(wordLimit, punctuator).breakText(text);
     }
     else {
       if (isGoogleTranslate(options.voice)) return new CharBreaker(200, punctuator).breakText(text);
+      else if (isPiperVoice(options.voice)) return [text];
       else return new CharBreaker(750, punctuator, 200).breakText(text);
     }
   }
@@ -69,48 +83,72 @@ function Speech(texts, options) {
     })
   }
 
-  function getPosition() {
+  function getInfo() {
     return {
-      index: index,
       texts: texts,
+      position: {
+        index: position.getIndex(),
+        word: position.getWord(),
+      },
       isRTL: /^(ar|az|dv|he|iw|ku|fa|ur)\b/.test(options.lang),
+      isPiper: engine == piperTtsEngine,
     }
   }
 
   function play() {
-    if (index >= texts.length) {
+    if (position.getIndex() >= texts.length) {
       state = "IDLE";
       if (self.onEnd) self.onEnd();
       return Promise.resolve();
     }
     else if (state == "PAUSED") {
       state = "PLAYING";
-      engine.resume();
-      return Promise.resolve();
+      return Promise.resolve()
+        .then(() => engine.resume())
+        .catch(err => {
+          console.error("Couldn't resume", err)
+          state = "IDLE"
+          return play()
+        })
     }
     else {
       state = new String("PLAYING");
       state.startTime = new Date().getTime();
-      return ready
-        .then(function() {
-          return speak(texts[index],
-            function() {
-              state = "IDLE";
-              if (engine.setNextStartTime) engine.setNextStartTime(new Date().getTime() + pauseDuration, options);
-              index++;
-              play()
-                .catch(function(err) {
-                  if (self.onEnd) self.onEnd(err)
-                })
-            },
-            function(err) {
-              state = "IDLE";
-              if (self.onEnd) self.onEnd(err);
+      return speak(texts[position.getIndex()], {
+        onEnd() {
+          state = "IDLE";
+          if (engine.setNextStartTime) engine.setNextStartTime(new Date().getTime() + pauseDuration, options);
+          position.setIndex(position.getIndex() + 1)
+          play()
+            .catch(function(err) {
+              if (self.onEnd) self.onEnd(err)
             })
-        })
-        .then(function() {
-          if (texts[index+1] && engine.prefetch) engine.prefetch(texts[index+1], options);
-        })
+        },
+        onError(err) {
+          state = "IDLE";
+          if (self.onEnd) self.onEnd(err);
+        },
+        onSentence({startIndex}) {
+          if (engine == piperTtsEngine) {
+            position.setIndex(sentenceStartIndicies.indexOf(startIndex))
+          }
+        }
+      })
+      .then(startEvent => {
+        if (engine == piperTtsEngine) {
+          const text = texts[0]
+          sentenceStartIndicies = startEvent.sentenceStartIndicies
+          texts = sentenceStartIndicies.map((startIndex, i) => {
+            return i+1 < sentenceStartIndicies.length
+              ? text.slice(startIndex, sentenceStartIndicies[i+1])
+              : text.slice(startIndex)
+          })
+        }
+        else {
+          const nextText = texts[position.getIndex() + 1]
+          if (nextText && engine.prefetch) engine.prefetch(nextText, options)
+        }
+      })
     }
   }
 
@@ -127,30 +165,27 @@ function Speech(texts, options) {
     )
   }
 
-  function pause() {
-    return ready
-      .then(function() {
-        if (canPause()) {
-          clearTimeout(delayedPlayTimer);
-          engine.pause();
-          state = "PAUSED";
-        }
-        else return stop();
-      })
+  async function pause() {
+    if (canPause()) {
+      clearTimeout(delayedPlayTimer);
+      engine.pause();
+      state = "PAUSED";
+    }
+    else return stop();
   }
 
-  function stop() {
-    return ready
-      .then(function() {
-        clearTimeout(delayedPlayTimer);
-        engine.stop();
-        state = "IDLE";
-      })
+  async function stop() {
+    clearTimeout(delayedPlayTimer);
+    engine.stop();
+    state = "IDLE";
   }
 
   function forward() {
-    if (index+1 < texts.length) {
-      index++;
+    if (engine.forward) {
+      return Promise.resolve(engine.forward())
+    }
+    if (position.getIndex() + 1 < texts.length) {
+      position.setIndex(position.getIndex() + 1)
       if (state == "PLAYING") return delayedPlay()
       else return stop()
     }
@@ -158,11 +193,14 @@ function Speech(texts, options) {
   }
 
   function rewind() {
+    if (engine.rewind) {
+      return Promise.resolve(engine.rewind())
+    }
     if (state == "PLAYING" && new Date().getTime()-state.startTime > 3*1000) {
       return stop().then(play);
     }
-    else if (index > 0) {
-      index--;
+    else if (position.getIndex() > 0) {
+      position.setIndex(position.getIndex() - 1)
       if (state == "PLAYING") return stop().then(play)
       else return stop()
     }
@@ -170,21 +208,27 @@ function Speech(texts, options) {
   }
 
   function seek(n) {
-    index = n;
-    return play();
+    if (engine.seek) {
+      return Promise.resolve(engine.seek(n))
+    }
+    position.setIndex(n)
+    return stop().then(play)
   }
 
-  function gotoEnd() {
-    index = texts.length && texts.length-1;
+  async function gotoEnd() {
+    if (engine.seek) {
+      return Promise.resolve(engine.seek(texts.length-1))
+    }
+    position.setIndex(texts.length && texts.length-1)
   }
 
-  function speak(text, onEnd, onError) {
+  function speak(text, {onEnd, onError, onSentence}) {
     var state = "IDLE";
     return new Promise(function(fulfill, reject) {
       engine.speak(text, options, function(event) {
         if (event.type == "start") {
           if (state == "IDLE") {
-            fulfill();
+            fulfill(event);
             state = "STARTED";
           }
         }
@@ -199,14 +243,19 @@ function Speech(texts, options) {
           }
         }
         else if (event.type == "error") {
-          if (state == "IDLE") {
-            reject(new Error(event.errorMessage || "Unknown TTS error"));
+          if (event.error.message == "Aborted") {
+          }
+          else if (state == "IDLE") {
+            reject(event.error);
             state = "ERROR";
           }
           else if (state == "STARTED") {
-            onError(new Error(event.errorMessage || "Unknown TTS error"));
+            onError(event.error);
             state = "ERROR";
           }
+        }
+        else if (event.type == "sentence") {
+          onSentence(event)
         }
       })
     })

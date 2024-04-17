@@ -1,6 +1,6 @@
 
 $(function() {
-  getSettings(["awsCreds", "gcpCreds", "ibmCreds"])
+  getSettings(["awsCreds", "gcpCreds", "ibmCreds", "rivaCreds", "openaiCreds", "azureCreds"])
     .then(function(items) {
       if (items.awsCreds) {
         $("#aws-access-key-id").val(obfuscate(items.awsCreds.accessKeyId));
@@ -8,16 +8,30 @@ $(function() {
       }
       if (items.gcpCreds) {
         $("#gcp-api-key").val(obfuscate(items.gcpCreds.apiKey));
+        $("#gcp-enable-studio").prop('checked', items.gcpCreds.enableStudio);
       }
       if (items.ibmCreds) {
         $("#ibm-api-key").val(obfuscate(items.ibmCreds.apiKey));
         $("#ibm-url").val(obfuscate(items.ibmCreds.url));
+      }
+      if (items.rivaCreds) {
+        $("#riva-url").val(obfuscate(items.rivaCreds.url));
+      }
+      if (items.openaiCreds) {
+        $("#openai-api-key").val(obfuscate(items.openaiCreds.apiKey))
+      }
+      if (items.azureCreds) {
+        $("#azure-region").val(items.azureCreds.region)
+        $("#azure-key").val(obfuscate(items.azureCreds.key))
       }
     })
   $(".status").hide();
   $("#aws-save-button").click(awsSave);
   $("#gcp-save-button").click(gcpSave);
   $("#ibm-save-button").click(ibmSave);
+  $("#riva-save-button").click(rivaSave);
+  $("#openai-save-button").click(openaiSave)
+  $("#azure-save-button").click(azureSave)
 })
 
 function obfuscate(key) {
@@ -40,8 +54,8 @@ function awsSave() {
         $("#aws-success").text("Amazon Polly voices are enabled.").show();
         $("#aws-access-key-id").val(obfuscate(accessKeyId));
         $("#aws-secret-access-key").val(obfuscate(secretAccessKey));
-      })
-      .catch(function(err) {
+      },
+      function(err) {
         $("#aws-progress").hide();
         $("#aws-error").text("Test failed: " + err.message).show();
       })
@@ -70,16 +84,21 @@ function testAws(accessKeyId, secretAccessKey) {
 function gcpSave() {
   $(".status").hide();
   var apiKey = $("#gcp-api-key").val().trim();
+  var enableStudio = $("#gcp-enable-studio").is(':checked');
   if (apiKey) {
     $("#gcp-progress").show();
     testGcp(apiKey)
       .then(function() {
         $("#gcp-progress").hide();
-        updateSettings({gcpCreds: {apiKey: apiKey}});
-        $("#gcp-success").text("Google Wavenet voices are enabled.").show();
+        updateSettings({gcpCreds: {apiKey: apiKey, enableStudio: enableStudio}});
+        if (enableStudio) {
+          $("#gcp-success").text("Google Wavenet & Studio voices are enabled.").show();
+        } else {
+          $("#gcp-success").text("Google Wavenet voices are enabled.").show();
+        }
         $("#gcp-api-key").val(obfuscate(apiKey));
-      })
-      .catch(function(err) {
+      },
+      function(err) {
         $("#gcp-progress").hide();
         $("#gcp-error").text("Test failed: " + err.message).show();
       })
@@ -110,8 +129,8 @@ function ibmSave() {
         $("#ibm-success").text("IBM Watson voices are enabled.").show();
         $("#ibm-api-key").val(obfuscate(apiKey));
         $("#ibm-url").val(obfuscate(url));
-      })
-      .catch(function(err) {
+      },
+      function(err) {
         $("#ibm-progress").hide();
         $("#ibm-error").text("Test failed: " + err.message).show();
       })
@@ -133,6 +152,108 @@ function testIbm(apiKey, url) {
       if (!granted) throw new Error("Permission not granted");
     })
     .then(function() {
-      return bgPageInvoke("ibmFetchVoices", [apiKey, url]);
+      return ibmWatsonTtsEngine.fetchVoices(apiKey, url);
     })
+}
+
+function rivaSave() {
+  $(".status").hide();
+  var url = $("#riva-url").val().trim();
+  if (url) {
+    $("#riva-progress").show();
+    testRiva(url)
+      .then(function() {
+        $("#riva-progress").hide();
+        updateSettings({rivaCreds: {url: url}});
+        $("#riva-success").text("Nvidia Riva voices are enabled.").show();
+        $("#riva-url").val(obfuscate(url));
+      },
+      function(err) {
+        $("#riva-progress").hide();
+        $("#riva-error").text("Test failed: " + err.message).show();
+      })
+  }
+  else if (!url) {
+    clearSettings(["rivaCreds"])
+      .then(function() {
+        $("#riva-success").text("Nvidia Riva voices are disabled.").show();
+      })
+  }
+  else {
+    $("#riva-error").text("Missing required fields.").show();
+  }
+}
+
+function testRiva(url) {
+  return requestPermissions({origins: [url + "/*"]})
+  .then(function(granted) {
+    if (!granted) throw new Error("Permission not granted");
+  })
+  .then(function() {
+    return nvidiaRivaTtsEngine.fetchVoices(url);
+  })
+}
+
+
+async function openaiSave() {
+  $(".status").hide()
+  const apiKey = $("#openai-api-key").val().trim()
+  if (apiKey) {
+    $("#openai-progress").show()
+    try {
+      await testOpenai(apiKey)
+      await updateSettings({openaiCreds: {apiKey: apiKey}})
+      $("#openai-success").text("ChatGPT voices are enabled.").show()
+      $("#openai-api-key").val(obfuscate(apiKey))
+    }
+    catch (err) {
+      $("#openai-error").text("Test failed: " + err.message).show()
+    }
+    finally {
+      $("#openai-progress").hide()
+    }
+  }
+  else {
+    await clearSettings(["openaiCreds"])
+    $("#openai-success").text("ChatGPT voices are disabled.").show()
+  }
+}
+
+async function testOpenai(apiKey) {
+  const res = await fetch("https://api.openai.com/v1/models", {headers: {"Authorization": "Bearer " + apiKey}})
+  if (!res.ok) throw await res.json().then(x => x.error)
+}
+
+
+
+async function azureSave() {
+  $(".status").hide()
+  const region = $("#azure-region").val().trim()
+  const key = $("#azure-key").val().trim()
+  if (region && key) {
+    $("#azure-progress").show()
+    try {
+      await testAzure(region, key)
+      await updateSettings({azureCreds: {region, key}})
+      $("#azure-success").text("Azure voices are enabled.").show()
+      $("#azure-key").val(obfuscate(key))
+    }
+    catch (err) {
+      $("#azure-error").text("Test failed: " + err.message).show()
+    }
+    finally {
+      $("#azure-progress").hide()
+    }
+  }
+  else if (!region && !key) {
+    await clearSettings(["azureCreds"])
+    $("#azure-success").text("IBM Watson voices are disabled.").show()
+  }
+  else {
+    $("#azure-error").text("Missing required fields.").show()
+  }
+}
+
+async function testAzure(region, key) {
+  await azureTtsEngine.fetchVoices(region, key)
 }
