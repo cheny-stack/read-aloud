@@ -319,12 +319,12 @@ function isAmazonCloud(voice) {
 }
 
 function isChinese(voice) {
-  const regex = /chinese|hk|tw/i;
+  const regex = /chinese|hk|tw|CN/i;
   return regex.test(voice.voiceName);
 }
 
 function isUnitedStates(voice) {
-  const regex = /united states/i;
+  const regex = /English/i;
   return regex.test(voice.voiceName);
 }
 
