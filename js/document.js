@@ -580,9 +580,9 @@ function Doc(source, onEnd) {
         var lang = (!info.detectedLang || info.lang && info.lang.startsWith(info.detectedLang)) ? info.lang : info.detectedLang;
         console.log("Chosen", lang)
         var chinesePattern = /[\u4e00-\u9fa5]/;
-        // 根据文字动态切换英文
+        // 根据文字动态切换英文 GoogleStandard cmn-TW (Anna)  GoogleStandard US English (Daniel)  GoogleWavenet US English (Daniel)
         if (lang === 'en' && !chinesePattern.test(texts)) {
-          settings.voiceName = "Microsoft EmmaMultilingual Online (Natural) - English (United States)";
+          settings.voiceName = "GoogleWavenet US English (Daniel)";
           settings.rate=1.0;
         }
         console.log("声音设置: ", settings)
