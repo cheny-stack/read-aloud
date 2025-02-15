@@ -18,7 +18,7 @@
       if (queryString.referer) {
         $("button.close").show()
           .click(function() {
-            location.href = queryString.referer;
+            history.back();
           })
       }
     })
@@ -66,28 +66,39 @@
       $("#voices")
         .change(function() {
           var voiceName = $(this).val();
-          if (voiceName == "@custom") location.href = "custom-voices.html";
+          if (voiceName == "@custom") brapi.tabs.create({url: "custom-voices.html"});
+          else if (voiceName == "@languages") brapi.tabs.create({url: "languages.html"});
           else if (voiceName == "@premium") brapi.tabs.create({url: "premium-voices.html"});
           else if (voiceName == "@piper") bgPageInvoke("managePiperVoices").catch(console.error)
           else updateSettings({voiceName})
         });
       $("#languages-edit-button")
         .click(function() {
-          location.href = "languages.html";
+          brapi.tabs.create({url: "languages.html"});
         })
     })
 
-  const voicesPopulatedObservable = rxjs.combineLatest([settingsObservable.of("languages"), voicesPromise, domReadyPromise])
-    .pipe(
-      rxjs.tap(([languages, voices]) => populateVoices(voices, {languages})),
+  const voicesPopulatedObservable = rxjs.combineLatest([
+    voicesPromise,
+    settingsObservable.of("languages"),
+    brapi.i18n.getAcceptLanguages().catch(err => {console.error(err); return []}),
+    domReadyPromise
+  ]).pipe(
+      rxjs.tap(([voices, languages, acceptLangs]) => populateVoices(voices, {languages}, acceptLangs)),
       rxjs.share()
     )
 
   rxjs.combineLatest([settingsObservable.of("voiceName"), voicesPopulatedObservable])
     .subscribe(([voiceName]) => {
       $("#voices").val(voiceName || "")
-      $("#voice-info").toggle(!!voiceName && isGoogleWavenet({voiceName}))
     })
+
+  rxjs.combineLatest(
+    settingsObservable.of("voiceName"),
+    settingsObservable.of("gcpCreds")
+  ).subscribe(([voiceName, gcpCreds]) => {
+    $("#voice-info").toggle(!!voiceName && isGoogleWavenet({voiceName}) && !gcpCreds)
+  })
 
 
 
@@ -130,7 +141,7 @@
 
   rxjs.combineLatest([settingsObservable.of("voiceName"), rateObservable, domReadyPromise])
     .subscribe(([voiceName, rate]) => {
-      $("#rate-warning").toggle((!voiceName || !isRemoteVoice({voiceName})) && rate > 2)
+      $("#rate-warning").toggle((!voiceName || isNativeVoice({voiceName})) && rate > 2)
     })
 
 
@@ -202,6 +213,18 @@
   domReadyPromise
     .then(() => {
       var demoSpeech = {};
+      const statusTracker$ = new rxjs.Subject()
+      statusTracker$.pipe(
+        rxjs.switchMap(() =>
+          rxjs.interval(500).pipe(
+            rxjs.exhaustMap(() => bgPageInvoke("getPlaybackState")),
+            rxjs.takeWhile(({state}) => state != "STOPPED", true)
+          )
+        )
+      ).subscribe(({playbackError}) => {
+        if (playbackError) handleError(playbackError)
+      })
+
       $("#test-voice")
         .click(async function() {
           try {
@@ -214,6 +237,7 @@
               demoSpeech[lang] = await ajaxGet(config.serviceUrl + "/read-aloud/get-demo-speech-text/" + lang).then(JSON.parse)
             }
             await bgPageInvoke("playText", [demoSpeech[lang].text, {lang: lang}])
+            statusTracker$.next()
           }
           catch (err) {
             handleError(err);
@@ -247,27 +271,7 @@
 
 
 
-
-
-
-  function makeSettingsObservable() {
-    const changes = new rxjs.Observable(observer => brapi.storage.local.onChanged.addListener(changes => observer.next(changes)))
-      .pipe(rxjs.share())
-    return {
-      changes,
-      of(name) {
-        return rxjs.from(brapi.storage.local.get([name]))
-          .pipe(
-            rxjs.map(settings => settings[name]),
-            rxjs.concatWith(changes.pipe(rxjs.filter(settings => name in settings), rxjs.map(settings => settings[name].newValue))),
-          )
-      }
-    }
-  }
-
-
-
-  function populateVoices(allVoices, settings) {
+  function populateVoices(allVoices, settings, acceptLangs) {
     $("#voices").empty()
     $("<option>")
       .val("")
@@ -275,10 +279,18 @@
       .appendTo("#voices")
 
     //get voices filtered by selected languages
-    var selectedLangs = settings.languages && settings.languages.split(',');
+    var selectedLangs = immediate(() => {
+      if (settings.languages) return settings.languages.split(',')
+      if (settings.languages == '') return null
+      const accept = new Set(acceptLangs.map(x => x.split('-',1)[0]))
+      const langs = Object.keys(groupVoicesByLang(allVoices)).filter(x => accept.has(x))
+      return langs.length ? langs : null
+    })
     var voices = !selectedLangs ? allVoices : allVoices.filter(
       function(voice) {
-        return !voice.lang || selectedLangs.includes(voice.lang.split('-',1)[0]);
+        return !voice.lang || selectedLangs.includes(voice.lang.split('-',1)[0])
+          || isPiperVoice(voice)
+          || isOpenai(voice)
       });
 
     //group by standard/premium
@@ -353,6 +365,10 @@
       .attr("label", brapi.i18n.getMessage("options_voicegroup_additional"))
       .appendTo($("#voices"));
     $("<option>")
+      .val("@languages")
+      .text(brapi.i18n.getMessage("options_add_more_languages"))
+      .appendTo(additional)
+    $("<option>")
       .val("@custom")
       .text(brapi.i18n.getMessage("options_enable_custom_voices"))
       .appendTo(additional)
@@ -361,8 +377,11 @@
   function voiceSorter(a, b) {
     function getWeight(voice) {
       var weight = 0
-      if (isRemoteVoice(voice)) weight += 10
+      //native voices should appear before non-natives in Standard group
+      if (!isNativeVoice(voice)) weight += 10
+      //ReadAloud Generic Voice should appear first among the non-natives
       if (!isReadAloudCloud(voice)) weight += 1
+      //UseMyPhone should appear last in Offline group
       if (isUseMyPhone(voice)) weight += 1
       return weight
     }
@@ -394,7 +413,7 @@
               })
             break;
           case "#auth-wavenet":
-            requestPermissions(config.wavenetPerms)
+            brapi.permissions.request(config.wavenetPerms)
               .then(function(granted) {
                 if (granted) bgPageInvoke("authWavenet");
               })

@@ -27,8 +27,8 @@ function TabSource() {
   var waiting = true;
   var sendToSource;
 
-  this.ready = getState("sourceUri")
-    .then(uri => {
+  this.ready = brapi.storage.local.get(["sourceUri"])
+    .then(({sourceUri: uri}) => {
       if (uri.startsWith("contentscript:")) {
         const tabId = Number(uri.substr(14))
         sendToSource = sendToContentScript.bind(null, tabId)
@@ -80,7 +80,7 @@ function TabSource() {
     message.dest = "contentScript"
     const result = await brapi.tabs.sendMessage(tabId, message)
       .catch(err => {
-        clearState("contentScriptTabId")
+        brapi.storage.local.remove("contentScriptTabId")
         if (/^(A listener indicated|Could not establish)/.test(err.message)) throw new Error(err.message + " " + message.method)
         throw err
       })
@@ -131,9 +131,7 @@ function Doc(source, onEnd) {
   var info;
   var currentIndex;
   var activeSpeech;
-  var ready = Promise.resolve(source.getUri())
-    .then(function(uri) {return setState("lastUrl", uri)})
-    .then(function() {return source.ready})
+  var ready = source.ready
     .then(function(result) {info = result})
   var foundText;
   const playbackState = new rxjs.BehaviorSubject("resumed")
@@ -154,7 +152,10 @@ function Doc(source, onEnd) {
     return ready
       .catch(function() {})
       .then(function() {
-        if (activeSpeech) activeSpeech.stop().then(function() {activeSpeech = null});
+        if (activeSpeech) {
+          activeSpeech.stop()
+          activeSpeech = null
+        }
         source.close();
       })
   }
@@ -330,7 +331,10 @@ function Doc(source, onEnd) {
   function stop() {
     return ready
       .then(function() {
-        if (activeSpeech) return activeSpeech.stop().then(function() {activeSpeech = null});
+        if (activeSpeech) {
+          activeSpeech.stop()
+          activeSpeech = null
+        }
       })
   }
 
@@ -355,7 +359,10 @@ function Doc(source, onEnd) {
 
   //method forward
   function forward() {
-    if (activeSpeech) return activeSpeech.forward().catch(forwardPage);
+    if (activeSpeech) {
+      if (activeSpeech.canForward()) activeSpeech.forward()
+      else forwardPage()
+    }
     else return Promise.reject(new Error("Can't forward, not active"));
   }
 
@@ -365,7 +372,10 @@ function Doc(source, onEnd) {
 
   //method rewind
   function rewind() {
-    if (activeSpeech) return activeSpeech.rewind().catch(rewindPage);
+    if (activeSpeech) {
+      if (activeSpeech.canRewind()) activeSpeech.rewind()
+      else rewindPage()
+    }
     else return Promise.reject(new Error("Can't rewind, not active"));
   }
 

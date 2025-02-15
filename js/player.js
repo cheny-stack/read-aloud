@@ -3,6 +3,7 @@ const isEmbedded = top != self
 var queryString = new URLSearchParams(location.search)
 var activeDoc;
 var playbackError = null;
+var lastUrlPromise = Promise.resolve(null)
 
 
 const piperSubject = new rxjs.Subject()
@@ -24,6 +25,35 @@ const piperDispatcher = makeDispatcher("piper-host", {
   onParagraph: args => piperCallbacks.next({type: "paragraph", ...args}),
   onEnd: args => piperCallbacks.next({type: "end", ...args}),
   onError: args => piperCallbacks.next({type: "error", ...args}),
+  audioPlay: args => audioPlayer.play(args.src, args.rate, args.volume),
+  audioPause: () => audioPlayer.pause(),
+  audioResume: () => audioPlayer.resume(),
+})
+
+const audioPlayer = immediate(() => {
+  let current
+  return {
+    play(src, rate, volume) {
+      if (current) current.playback.unsubscribe()
+      const url = (src instanceof Blob) ? URL.createObjectURL(src) : src
+      const playbackState$ = new rxjs.BehaviorSubject("resumed")
+      return new Promise((fulfill, reject) => {
+        current = {
+          playbackState$,
+          playback: playAudio(Promise.resolve(url), {rate, volume}, playbackState$).subscribe({
+            complete: fulfill,
+            error: reject
+          })
+        }
+      })
+    },
+    pause() {
+      if (current) current.playbackState$.next("paused")
+    },
+    resume() {
+      if (current) current.playbackState$.next("resumed")
+    }
+  }
 })
 
 
@@ -71,7 +101,7 @@ if (queryString.has("autoclose"))
   rxjs.combineLatest(idleSubject, piperSubject.pipe(rxjs.startWith(null)))
     .pipe(
       rxjs.switchMap(([isIdle, piper]) => {
-        if (isIdle) return rxjs.timer(piper ? 30*60*1000 : 5*60*1000)
+        if (isIdle) return rxjs.timer(piper ? 15*60*1000 : 5*60*1000)
         else return rxjs.EMPTY
       })
     )
@@ -95,6 +125,7 @@ var messageHandlers = {
   startPairing: () => phoneTtsEngine.startPairing(),
   isPaired: () => phoneTtsEngine.isPaired(),
   managePiperVoices,
+  getLastUrl: () => lastUrlPromise,
 }
 
 registerMessageListener("player", messageHandlers)
@@ -202,6 +233,9 @@ function getPlaybackState() {
           playbackError: errorToJson(playbackError),
         }
       })
+      .finally(() => {
+        playbackError = null
+      })
   }
   else {
     return {
@@ -218,6 +252,7 @@ function openDoc(source, onEnd) {
     if (typeof onEnd == "function") onEnd(err);
   })
   idleSubject.next(false)
+  lastUrlPromise = Promise.resolve(source.getUri())
 }
 
 function closeDoc() {
@@ -261,18 +296,18 @@ function reportError(err) {
     var details = err.stack;
     if (!details.startsWith(err.name)) details = err.name + ": " + err.message + "\n" + details;
     console.error(details)
-    getState("lastUrl")
+    lastUrlPromise
       .then(url => bgPageInvoke("reportIssue", [url, details]))
       .catch(console.error)
   }
 }
 
-function playAudio(urlPromise, options, startTime) {
+function playAudio(urlPromise, options, playbackState$) {
   if (brapi.offscreen) {
-    return playAudioOffscreen(urlPromise, options, startTime)
+    return playAudioOffscreen(urlPromise, options, playbackState$)
   }
   else {
-    return playAudioHere(requestAudioPlaybackPermission().then(() => urlPromise), options, startTime)
+    return playAudioHere(requestAudioPlaybackPermission().then(() => urlPromise), options, playbackState$)
   }
 }
 
@@ -286,41 +321,68 @@ var requestAudioPlaybackPermission = lazy(async function() {
   await brapi.tabs.update(prevTab.id, {active: true})
 })
 
-async function createOffscreenIfNotExist() {
-  const hasOffscreen = await sendToOffscreen({method: "pause"}).then(res => res == true, err => false)
-  if (!hasOffscreen) {
-    const readyPromise = new Promise(f => messageHandlers.offscreenCheckIn = f)
-    brapi.offscreen.createDocument({
-      reasons: ["AUDIO_PLAYBACK"],
-      justification: "Read Aloud would like to play audio in the background",
-      url: brapi.runtime.getURL("offscreen.html")
-    })
-    await readyPromise
-  }
+async function createOffscreen() {
+  const readyPromise = new Promise(f => messageHandlers.offscreenCheckIn = f)
+  brapi.offscreen.createDocument({
+    reasons: ["AUDIO_PLAYBACK"],
+    justification: "Read Aloud would like to play audio in the background",
+    url: brapi.runtime.getURL("offscreen.html")
+  })
+  await readyPromise
 }
 
-function playAudioOffscreen(urlPromise, options, startTime) {
-  const readyPromise = createOffscreenIfNotExist().then(() => urlPromise)
-  const startPromise = readyPromise.then(url => sendToOffscreen({method: "play", args: [url, options, startTime]}))
-  const endPromise = new Promise((fulfill, reject) => {
-    messageHandlers.offscreenPlaybackEnded = err => err ? reject(err) : fulfill()
-  })
-  return {
-    startPromise,
-    endPromise: endPromise,
-    pause: function() {
-      readyPromise
-        .then(() => sendToOffscreen({method: "pause"}))
-        .catch(console.error)
-    },
-    resume: function() {
-      return readyPromise
-        .then(() => sendToOffscreen({method: "resume"}))
-        .then(res => {
-          if (res != true) throw new Error("Offscreen player unreachable")
-        })
-    },
-  }
+function playAudioOffscreen(urlPromise, options, playbackState$) {
+  return rxjs.from(urlPromise).pipe(
+    rxjs.exhaustMap(url =>
+      playbackState$.pipe(
+        rxjs.distinctUntilChanged(),
+        rxjs.skipWhile(state => state != "resumed"),
+        rxjs.scan((playback$, state) => {
+          if (state == "resumed") {
+            return rxjs.defer(async () => {
+              if (!playback$) {
+                const result = await sendToOffscreen({method: "play", args: [url, options]})
+                if (result != true) throw "Offscreen doc not present"
+              } else {
+                const result = await sendToOffscreen({method: "resume"})
+                if (result != true) throw "Offscreen doc gone"
+              }
+            }).pipe(
+              rxjs.catchError(err => {
+                console.debug(err)
+                return rxjs.defer(createOffscreen).pipe(
+                  rxjs.exhaustMap(async () => {
+                    const result = await sendToOffscreen({method: "play", args: [url, options]})
+                    if (result != true) throw new Error("Offscreen doc inaccessible")
+                  })
+                )
+              }),
+              rxjs.exhaustMap(() =>
+                rxjs.NEVER.pipe(
+                  rxjs.finalize(() => {
+                    sendToOffscreen({method: "pause"})
+                      .catch(console.error)
+                  })
+                )
+              )
+            )
+          } else {
+            return rxjs.EMPTY
+          }
+        }, null),
+        rxjs.switchAll()
+      )
+    ),
+    rxjs.mergeWith(
+      new rxjs.Observable(observer => {
+        messageHandlers.offscreenPlaybackEvent = function(event) {
+          if (event.type == "error") observer.error(event.error)
+          else observer.next(event)
+        }
+      })
+    ),
+    rxjs.takeWhile(event => event.type != "end", true)
+  )
 }
 
 async function sendToOffscreen(message) {

@@ -1,11 +1,10 @@
 
 var browserTtsEngine = brapi.tts ? new BrowserTtsEngine() : (typeof speechSynthesis != 'undefined' ? new WebSpeechEngine() : new DummyTtsEngine());
-var remoteTtsEngine = new RemoteTtsEngine(config.serviceUrl);
+var premiumTtsEngine = new PremiumTtsEngine(config.serviceUrl);
 var googleTranslateTtsEngine = new GoogleTranslateTtsEngine();
 var amazonPollyTtsEngine = new AmazonPollyTtsEngine();
 var googleWavenetTtsEngine = new GoogleWavenetTtsEngine();
 var ibmWatsonTtsEngine = new IbmWatsonTtsEngine();
-var nvidiaRivaTtsEngine = new NvidiaRivaTtsEngine();
 var phoneTtsEngine = new PhoneTtsEngine();
 var openaiTtsEngine = new OpenaiTtsEngine();
 var azureTtsEngine = new AzureTtsEngine();
@@ -34,11 +33,7 @@ interface Voice {
 }
 
 interface TtsEngine {
-  speak: function(text: string, opts: Options, onEvent: (e:Event) => void): void
-  stop: function(): void
-  pause: function(): void
-  resume: function(): void|Promise<void>
-  isSpeaking: function(callback): void
+  speak: function(text: string, opts: Options, playbackState$: Observable<"paused"|"resumed">): Observable<TtsEvent>
   getVoices: function(): Voice[]
 }
 */
@@ -137,98 +132,97 @@ function DummyTtsEngine() {
 }
 
 
-function TimeoutTtsEngine(baseEngine, timeoutMillis) {
-  var timer;
+function TimeoutTtsEngine(baseEngine, startTimeout, endTimeout) {
+  let speakSub
   this.speak = function(text, options, onEvent) {
-    var started = false;
-    clearTimeout(timer);
-    timer = setTimeout(function() {
-      baseEngine.stop();
-      if (started) onEvent({type: "end", charIndex: text.length});
-      else onEvent({type: "error", error: new Error("Timeout, TTS never started, try picking another voice?")});
-    },
-    timeoutMillis);
-    baseEngine.speak(text, options, function(event) {
-        if (event.type == "start") started = true;
-        if (event.type == "end" || event.type == "error") clearTimeout(timer);
-        onEvent(event);
-    })
+    speakSub = new rxjs.Observable(observer => {
+      baseEngine.speak(text, options, event => observer.next(event))
+    }).pipe(
+      rxjs.timeout({
+        first: startTimeout,
+        with() {
+          console.debug(`No 'start' event after ${startTimeout}, will call stop() and retry once`)
+          baseEngine.stop()
+          return rxjs.throwError(() => new Error("Timeout, TTS never started, try picking another voice?"))
+        }
+      }),
+      rxjs.retry(1),
+      rxjs.mergeMap(event =>
+        rxjs.iif(
+          () => event.type == "start",
+          rxjs.timer(endTimeout).pipe(
+            rxjs.map(() => {
+              console.debug(`No 'end' event after ${endTimeout}, will call stop() and generate 'end'`)
+              baseEngine.stop()
+              return {type: "end", charIndex: text.length}
+            }),
+            rxjs.startWith(event)
+          ),
+          rxjs.of(event)
+        )
+      ),
+      rxjs.catchError(error => rxjs.of({type: "error", error})),
+      rxjs.takeWhile(event => event.type != "end" && event.type != "error", true)
+    ).subscribe(onEvent)
   }
   this.stop = function() {
-    clearTimeout(timer);
+    if (speakSub) speakSub.unsubscribe()
     baseEngine.stop();
   }
   this.isSpeaking = baseEngine.isSpeaking;
 }
 
 
-function RemoteTtsEngine(serviceUrl) {
-  var manifest = brapi.runtime.getManifest();
-  var isSpeaking = false;
+function PremiumTtsEngine(serviceUrl) {
+  var readyPromise;
+  var prefetchAudio;
   var nextStartTime = 0;
-  var authToken;
-  var clientId;
-  var audio;
-  function ready(options) {
-    return getAuthToken()
-      .then(function(token) {authToken = token})
-      .then(getUniqueClientId)
-      .then(function(id) {clientId = id})
-      .then(function() {
-        if (isPremiumVoice(options.voice) && !options.voice.autoSelect) {
-          if (!authToken) throw new Error(JSON.stringify({code: "error_login_required"}));
-          return getAccountInfo(authToken)
-            .then(function(account) {
-              if (!account) throw new Error(JSON.stringify({code: "error_login_required"}));
-              if (!account.balance) throw new Error(JSON.stringify({code: "error_payment_required"}));
-            })
-        }
-      })
+  this.prepare = function(options) {
+    readyPromise = immediate(async () => {
+      const authToken = await getAuthToken()
+      if (isPremiumVoice(options.voice) && !options.voice.autoSelect) {
+        if (!authToken) throw new Error(JSON.stringify({code: "error_login_required"}));
+        const account = await getAccountInfo(authToken)
+        if (!account) throw new Error(JSON.stringify({code: "error_login_required"}));
+        if (!account.balance) throw new Error(JSON.stringify({code: "error_payment_required"}));
+      }
+      return {
+        authToken,
+        clientId: await getUniqueClientId(),
+        manifest: brapi.runtime.getManifest()
+      }
+    })
   }
-  this.speak = function(utterance, options, onEvent) {
-    const urlPromise = ready(options)
-      .then(function() {
-        return getAudioUrl(utterance, options.lang, options.voice)
-      })
-    audio = playAudio(urlPromise, options, nextStartTime)
-    audio.startPromise
+  this.speak = function(utterance, options, playbackState$) {
+    const urlPromise = Promise.resolve()
       .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
+        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
+        else return getAudioUrl(utterance, options)
       })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
+    return playAudio(urlPromise, {...options, startTime: nextStartTime}, playbackState$).pipe(
+      rxjs.tap(event => {
+        if (event.type == "end") nextStartTime = Date.now() + 650 / options.rate
       })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  }
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  }
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  }
-  this.resume = function() {
-    return audio.resume()
+    )
   }
   this.prefetch = function(utterance, options) {
-    if (!isIOS()) {
-      ajaxGet(getAudioUrl(utterance, options.lang, options.voice, true));
-    }
-  }
-  this.setNextStartTime = function(time, options) {
-    if (!isIOS())
-      nextStartTime = time || 0;
+    getAudioUrl(utterance, options)
+      .then(url => prefetchAudio = [utterance, options, url])
+      .catch(console.error)
   }
   this.getVoices = function() {
     return voices;
   }
-  function getAudioUrl(utterance, lang, voice, prefetch) {
-    assert(utterance && lang && voice);
-    return serviceUrl + "/read-aloud/speak/" + lang + "/" + encodeURIComponent(voice.voiceName) + "?c=" + encodeURIComponent(clientId) + "&t=" + encodeURIComponent(authToken) + (voice.autoSelect ? '&a=1' : '') + "&v=" + manifest.version + "&pf=" + (prefetch ? 1 : 0) + "&q=" + encodeURIComponent(utterance);
+  async function getAudioUrl(utterance, {lang, voice}) {
+    const {authToken, clientId, manifest} = await readyPromise
+    const url = serviceUrl + "/read-aloud/speak/" + lang + "/" + encodeURIComponent(voice.voiceName) + "?c=" + encodeURIComponent(clientId) + "&t=" + encodeURIComponent(authToken) + (voice.autoSelect ? '&a=1' : '') + "&v=" + manifest.version + "&q=" + encodeURIComponent(utterance)
+    const res = await fetch(url)
+    if (!res.ok) {
+      const msg = await res.text().catch(err => "")
+      throw new Error(msg || (res.status + " " + res.statusText))
+    }
+    const blob = await res.blob()
+    return URL.createObjectURL(blob)
   }
   var voices = [
       {"voice_name": "Amazon Australian English (Nicole)", "lang": "en-AU", "gender": "female", "event_types": ["start", "end", "error"]},
@@ -364,41 +358,17 @@ function RemoteTtsEngine(serviceUrl) {
 
 function GoogleTranslateTtsEngine() {
   var prefetchAudio;
-  var isSpeaking = false;
-  var audio;
   this.ready = function() {
     return googleTranslateReady();
   };
-  this.speak = function(utterance, options, onEvent) {
+  this.speak = function(utterance, options, playbackState$) {
     options.rateAdjust = 1.1
     const urlPromise = Promise.resolve()
       .then(function() {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
         else return getAudioUrl(utterance, options.voice.lang);
       })
-    audio = playAudio(urlPromise, options)
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
-      })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  };
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  };
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  };
-  this.resume = function() {
-    return audio.resume()
+    return playAudio(urlPromise, options, playbackState$)
   };
   this.prefetch = function(utterance, options) {
     getAudioUrl(utterance, options.voice.lang)
@@ -406,8 +376,6 @@ function GoogleTranslateTtsEngine() {
         prefetchAudio = [utterance, options, url];
       })
       .catch(console.error)
-  };
-  this.setNextStartTime = function() {
   };
   this.getVoices = function() {
     return voices;
@@ -489,37 +457,13 @@ function GoogleTranslateTtsEngine() {
 function AmazonPollyTtsEngine() {
   var getPolly = lazy(createPolly)
   var prefetchAudio;
-  var isSpeaking = false;
-  var audio;
-  this.speak = function(utterance, options, onEvent) {
+  this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(function() {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
         else return getAudioUrl(utterance, options.lang, options.voice, options.pitch);
       })
-    audio = playAudio(urlPromise, options)
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
-      })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  };
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  };
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  };
-  this.resume = function() {
-    return audio.resume()
+    return playAudio(urlPromise, options, playbackState$)
   };
   this.prefetch = function(utterance, options) {
     getAudioUrl(utterance, options.lang, options.voice, options.pitch)
@@ -527,8 +471,6 @@ function AmazonPollyTtsEngine() {
         prefetchAudio = [utterance, options, url];
       })
       .catch(console.error)
-  };
-  this.setNextStartTime = function() {
   };
   this.getVoices = async function() {
     try {
@@ -624,37 +566,13 @@ function AmazonPollyTtsEngine() {
 
 function GoogleWavenetTtsEngine() {
   var prefetchAudio;
-  var isSpeaking = false;
-  var audio;
-  this.speak = function(utterance, options, onEvent) {
+  this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(function() {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
         else return getAudioUrl(utterance, options.voice, options.pitch);
       })
-    audio = playAudio(urlPromise, options)
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
-      })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  };
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  };
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  };
-  this.resume = function() {
-    return audio.resume()
+    return playAudio(urlPromise, options, playbackState$)
   };
   this.prefetch = function(utterance, options) {
     getAudioUrl(utterance, options.voice, options.pitch)
@@ -662,8 +580,6 @@ function GoogleWavenetTtsEngine() {
         prefetchAudio = [utterance, options, url];
       })
       .catch(console.error)
-  };
-  this.setNextStartTime = function() {
   };
   this.getVoices = function() {
     return getSettings(["wavenetVoices", "gcpCreds"])
@@ -696,7 +612,7 @@ function GoogleWavenetTtsEngine() {
   }
   function getAudioUrl(text, voice, pitch) {
     assert(text && voice);
-    var matches = voice.voiceName.match(/^Google(\w+) .* \((\w+)\)$/);
+    var matches = voice.voiceName.match(/^Google(\S+) .* \((\w+)\)$/);
     var voiceName = voice.lang + "-" + matches[1] + "-" + matches[2][0];
     var endpoint = matches[1] == "Neural2" ? "us-central1-texttospeech.googleapis.com" : "texttospeech.googleapis.com";
     return getSettings(["gcpCreds", "gcpToken"])
@@ -830,37 +746,14 @@ function GoogleWavenetTtsEngine() {
 
 
 function IbmWatsonTtsEngine() {
-  var isSpeaking = false;
-  var audio, prefetchAudio;
-  this.speak = function(utterance, options, onEvent) {
+  var prefetchAudio;
+  this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(() => {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
         else return getAudioUrl(utterance, options.voice)
       })
-    audio = playAudio(urlPromise, options)
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
-      })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  };
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  };
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  };
-  this.resume = function() {
-    return audio.resume()
+    return playAudio(urlPromise, options, playbackState$)
   };
   this.prefetch = async function(utterance, options) {
     try {
@@ -870,8 +763,6 @@ function IbmWatsonTtsEngine() {
     catch (err) {
       console.error(err)
     }
-  };
-  this.setNextStartTime = function() {
   };
   this.getVoices = function() {
     return getSettings(["watsonVoices", "ibmCreds"])
@@ -928,97 +819,6 @@ function IbmWatsonTtsEngine() {
           }
         })
       })
-  }
-}
-
-
-function NvidiaRivaTtsEngine() {
-  const RIVA_VOICE_PREFIX = "Nvidia-Riva "
-  var prefetchAudio;
-  var isSpeaking = false;
-  var audio;
-  this.speak = function(utterance, options, onEvent) {
-    const urlPromise = Promise.resolve()
-      .then(function() {
-        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2];
-        else return getAudioUrl(utterance, options.voice, options.pitch, options.rate);
-      })
-    // Rate supplied to player is always 1 because it is already represented in the generated audio
-    audio = playAudio(urlPromise, {...options, rate: 1})
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
-      })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  };
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  };
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  };
-  this.resume = function() {
-    return audio.resume()
-  };
-  this.prefetch = function(utterance, options) {
-    getAudioUrl(utterance, options.voice, options.pitch, options.rate)
-      .then(function(url) {
-        prefetchAudio = [utterance, options, url];
-      })
-      .catch(console.error)
-  };
-  this.setNextStartTime = function() {
-  };
-  this.getVoices = function() {
-    return getSettings(["rivaVoices", "rivaCreds"])
-      .then(function(items) {
-        if (!items.rivaCreds) return [];
-        if (items.rivaVoices && Date.now()-items.rivaVoices[0].ts < 24*3600*1000) return items.rivaVoices;
-        return fetchVoices(items.rivaCreds.url)
-          .then(function(list) {
-            list[0].ts = Date.now();
-            updateSettings({rivaVoices: list}).catch(console.error);
-            return list;
-          })
-          .catch(function(err) {
-            console.error(err);
-            return [];
-          })
-      })
-  }
-  async function getAudioUrl(text, voice, pitch, rate) {
-    assert(text && voice);
-    const settings = await getSettings(["rivaCreds"])
-    const res = await fetch(settings.rivaCreds.url + "/tts", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Accept": "audio/ogg;codecs=opus"
-      },
-      body: JSON.stringify({
-        voice: voice.voiceName.replace(RIVA_VOICE_PREFIX,''),
-        text: escapeHtml(text),
-        pitch,
-        rate
-      })
-    })
-    if (!res.ok) throw new Error("Server returns " + res.status)
-    const blob = await res.blob()
-    return URL.createObjectURL(blob);
-  }
-  this.fetchVoices = fetchVoices;
-  function fetchVoices(url) {
-    return ajaxGet({ url: url + "/voices" }).then(JSON.parse).then((voices)=>{
-      return voices.map((v)=>({...v, voiceName:RIVA_VOICE_PREFIX+v.voiceName}))
-    })
   }
 }
 
@@ -1141,37 +941,32 @@ function PhoneTtsEngine() {
 
 
 function OpenaiTtsEngine() {
-  var audio, prefetchAudio
-  var isSpeaking = false
-  this.speak = function(utterance, options, onEvent) {
+  this.defaultEndpointUrl = "https://api.openai.com/v1"
+  this.defaultVoiceList = [
+    {voice: "alloy", lang: "en-US", model: "tts-1"},
+    {voice: "echo", lang: "en-US", model: "tts-1"},
+    {voice: "fable", lang: "en-US", model: "tts-1"},
+    {voice: "onyx", lang: "en-US", model: "tts-1"},
+    {voice: "nova", lang: "en-US", model: "tts-1"},
+    {voice: "shimmer", lang: "en-US", model: "tts-1"},
+  ]
+  var prefetchAudio
+  this.test = async function({apiKey, url, voiceList}) {
+    const res = await fetch(url + "/models", {
+      headers: {"Authorization": "Bearer " + apiKey}
+    })
+    if (!res.ok) {
+      const {error} = await res.json()
+      throw error
+    }
+  }
+  this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(() => {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
         else return getAudioUrl(utterance, options.voice, options.pitch)
       })
-    audio = playAudio(urlPromise, options)
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true
-      })
-      .catch(err => {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  }
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking)
-  }
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  }
-  this.resume = function() {
-    return audio.resume()
+    return playAudio(urlPromise, options, playbackState$)
   }
   this.prefetch = async function(utterance, options) {
     try {
@@ -1182,75 +977,51 @@ function OpenaiTtsEngine() {
       console.error(err)
     }
   }
-  this.setNextStartTime = function() {
-  }
-  this.getVoices = function() {
-    return voices
+  this.getVoices = async function() {
+    const {openaiCreds} = await getSettings(["openaiCreds"])
+    return openaiCreds.voiceList.map(({voice, lang}) => ({
+      voiceName: "OpenAI " + voice,
+      lang
+    }))
   }
   async function getAudioUrl(text, voice, pitch) {
     assert(text && voice)
-    const matches = voice.voiceName.match(/^ChatGPT .* \((\w+)\)$/)
-    const voiceName = matches[1]
     const {openaiCreds} = await getSettings(["openaiCreds"])
-    const res = await fetch("https://api.openai.com/v1/audio/speech", {
+    const voiceId = voice.voiceName.slice(7)
+    const voiceInfo = openaiCreds.voiceList.find(x => x.voice == voiceId)
+    assert(voiceInfo, "Voice not found " + voiceId)
+    const res = await fetch(openaiCreds.url + "/audio/speech", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer " + openaiCreds.apiKey
+        ...(
+          openaiCreds.apiKey ? {
+            "Authorization": "Bearer " + openaiCreds.apiKey
+          } : null
+        )
       },
       body: JSON.stringify({
-        model: "tts-1",
+        model: voiceInfo.model,
         input: text,
-        voice: voiceName,
-        response_format: "opus",
+        voice: voiceInfo.voice,
+        response_format: "mp3",
       })
     })
     if (!res.ok) throw await res.json().then(x => x.error)
     return URL.createObjectURL(await res.blob())
   }
-  const voices = [
-    {"voiceName":"ChatGPT English (alloy)","lang":"en-US","gender":"female"},
-    {"voiceName":"ChatGPT English (echo)","lang":"en-US","gender":"male"},
-    {"voiceName":"ChatGPT English (fable)","lang":"en-US","gender":"female"},
-    {"voiceName":"ChatGPT English (onyx)","lang":"en-US","gender":"male"},
-    {"voiceName":"ChatGPT English (nova)","lang":"en-US","gender":"female"},
-    {"voiceName":"ChatGPT English (shimmer)","lang":"en-US","gender":"female"},
-  ]
 }
 
 
 function AzureTtsEngine() {
-  var isSpeaking = false;
-  var audio, prefetchAudio;
-  this.speak = function(utterance, options, onEvent) {
+  var prefetchAudio;
+  this.speak = function(utterance, options, playbackState$) {
     const urlPromise = Promise.resolve()
       .then(() => {
         if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
         else return getAudioUrl(utterance, options.lang, options.voice)
       })
-    audio = playAudio(urlPromise, options)
-    audio.startPromise
-      .then(() => {
-        onEvent({type: "start", charIndex: 0})
-        isSpeaking = true;
-      })
-      .catch(function(err) {
-        onEvent({type: "error", error: err})
-      })
-    audio.endPromise
-      .then(() => onEvent({type: "end", charIndex: utterance.length}),
-        err => onEvent({type: "error", error: err}))
-      .finally(() => isSpeaking = false)
-  };
-  this.isSpeaking = function(callback) {
-    callback(isSpeaking);
-  };
-  this.pause =
-  this.stop = function() {
-    audio.pause()
-  };
-  this.resume = function() {
-    return audio.resume()
+    return playAudio(urlPromise, options, playbackState$)
   };
   this.prefetch = async function(utterance, options) {
     try {
@@ -1260,8 +1031,6 @@ function AzureTtsEngine() {
     catch (err) {
       console.error(err)
     }
-  };
-  this.setNextStartTime = function() {
   };
   this.getVoices = async function() {
     try {
@@ -1335,6 +1104,7 @@ function PiperTtsEngine() {
                 pitch: options.pitch,
                 rate: options.rate,
                 volume: options.volume,
+                externalPlayback: options.rate && options.rate != 1,
               })
             case "pause":
               return piper.sendRequest("pause")

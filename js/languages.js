@@ -175,29 +175,25 @@ var langList = [
   {code: "zu", name: "isiZulu"},
 ]
 
-Promise.all([getVoices(), getSettings(["languages", "preferredVoices"]), domReady()]).then(spread(initialize));
-
-function initialize(voices, settings) {
+Promise.all([
+  getVoices(),
+  getSettings(["languages", "preferredVoices"]),
+  brapi.i18n.getAcceptLanguages().catch(err => {console.error(err); return []}),
+  domReady()
+]).then(([voices, settings, acceptLangs]) => {
   setI18nText();
 
   //create checkboxes
-  var langs = voices.groupBy(function(voice) {
-    if (voice.lang) {
-      var code = voice.lang.split('-',1)[0]
-      var alias = {
-        yue: "zh",
-        cmn: "zh",
-      }
-      return alias[code] || code
-    }
-    else {
-      return "<any>"
-    }
-  })
-  createCheckboxes(langs);
+  createCheckboxes(voices);
 
   //toggle check state
-  var selectedLangs = settings.languages ? settings.languages.split(',') : [];
+  var selectedLangs = immediate(() => {
+    if (settings.languages) return settings.languages.split(',')
+    if (settings.languages == '') return []
+    const accept = new Set(acceptLangs.map(x => x.split('-',1)[0]))
+    const langs = Object.keys(groupVoicesByLang(voices)).filter(x => accept.has(x))
+    return langs.length ? langs : []
+  })
   var isSelected = function() {
     return selectedLangs.includes($(this).data("lang"));
   };
@@ -218,12 +214,10 @@ function initialize(voices, settings) {
   $(".voice-list").change(function() {
     savePreferredVoices();
   })
-  $("#back-button").click(function() {
-    location.href = "options.html";
-  })
-}
+})
 
-function createCheckboxes(voicesForLang) {
+function createCheckboxes(voices) {
+  const voicesForLang = groupVoicesByLang(voices)
   for (var item of langList) {
     if (!voicesForLang[item.code]) continue;
 
