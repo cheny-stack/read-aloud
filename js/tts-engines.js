@@ -210,8 +210,23 @@ function PremiumTtsEngine(serviceUrl) {
       .then(url => prefetchAudio = [utterance, options, url])
       .catch(console.error)
   }
-  this.getVoices = function() {
-    return voices;
+  this.getVoices = async function() {
+    const premiumVoiceList = await getSetting("premiumVoiceList")
+    if (!premiumVoiceList || premiumVoiceList.expire < Date.now()) refreshVoiceList()
+    return (premiumVoiceList ? premiumVoiceList.items : voices)
+      .concat(
+        {voiceName: "ReadAloud Generic Voice", autoSelect: true},
+      )
+  }
+  async function refreshVoiceList() {
+    try {
+      const res = await fetch(serviceUrl + "/read-aloud/list-voices/premium")
+      if (!res.ok) throw new Error("Server return " + res.status)
+      const items = await res.json()
+      await updateSetting("premiumVoiceList", {items, expire: Date.now() + 24*3600*1000})
+    } catch (err) {
+      console.error("Error refreshing premium voice list", err)
+    }
   }
   async function getAudioUrl(utterance, {lang, voice}) {
     const {authToken, clientId, manifest} = await readyPromise
@@ -350,9 +365,6 @@ function PremiumTtsEngine(serviceUrl) {
     .map(function(item) {
       return {voiceName: item.voice_name, lang: item.lang};
     })
-    .concat(
-      {voiceName: "ReadAloud Generic Voice", autoSelect: true},
-    )
 }
 
 
@@ -613,7 +625,8 @@ function GoogleWavenetTtsEngine() {
   function getAudioUrl(text, voice, pitch) {
     assert(text && voice);
     var matches = voice.voiceName.match(/^Google(\S+) .* \((\w+)\)$/);
-    var voiceName = voice.lang + "-" + matches[1] + "-" + matches[2][0];
+    const voiceType = matches[1];
+    const speakerId = voiceType == "Chirp3-HD" ? matches[2] : matches[2][0];
     var endpoint = matches[1] == "Neural2" ? "us-central1-texttospeech.googleapis.com" : "texttospeech.googleapis.com";
     return getSettings(["gcpCreds", "gcpToken"])
       .then(function(settings) {
@@ -623,13 +636,13 @@ function GoogleWavenetTtsEngine() {
           },
           voice: {
             languageCode: voice.lang,
-            name: voiceName
+            name: voice.lang + "-" + voiceType + "-" + speakerId
           },
           audioConfig: {
             audioEncoding: "OGG_OPUS",
-            pitch: ((pitch || 1) -1) *20
           }
         }
+        if (!voiceType.startsWith("Chirp")) postData.audioConfig.pitch = ((pitch || 1) -1) *20;
         if (settings.gcpCreds) return ajaxPost("https://" + endpoint + "/v1/text:synthesize?key=" + settings.gcpCreds.apiKey, postData, "json");
         if (!settings.gcpToken) throw new Error(JSON.stringify({code: "error_wavenet_auth_required"}));
         return ajaxPost("https://cxl-services.appspot.com/proxy?url=https://texttospeech.googleapis.com/v1beta1/text:synthesize&token=" + settings.gcpToken, postData, "json")
@@ -978,8 +991,9 @@ function OpenaiTtsEngine() {
     }
   }
   this.getVoices = async function() {
-    const {openaiCreds} = await getSettings(["openaiCreds"])
-    return openaiCreds.voiceList.map(({voice, lang}) => ({
+    const openaiCreds = await getSetting("openaiCreds")
+    const voiceList = openaiCreds ? (openaiCreds.voiceList || this.defaultVoiceList) : []
+    return voiceList.map(({voice, lang}) => ({
       voiceName: "OpenAI " + voice,
       lang
     }))

@@ -3,7 +3,6 @@ brapi.runtime.onInstalled.addListener(function() {
   installContentScripts()
   installContextMenus()
 })
-if (getBrowser() == "firefox") brapi.runtime.onStartup.addListener(installContextMenus);
 
 
 /**
@@ -395,6 +394,7 @@ async function injectContentScript(tab, frameId, extraScripts) {
       frameIds: frameId ? [frameId] : undefined,
     },
     files: [
+      "js/rxjs.umd.min.js",
       "js/jquery-3.7.1.min.js",
       "js/defaults.js",
       "js/messaging.js",
