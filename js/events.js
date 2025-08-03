@@ -12,6 +12,7 @@ var handlers = {
   playText: playText,
   playTab: playTab,
   reloadAndPlayTab: reloadAndPlayTab,
+  playClipboard: playClipboard,
   stop: stop,
   pause: pause,
   resume: resume,
@@ -58,16 +59,27 @@ async function installContentScripts() {
 }
 
 function installContextMenus() {
-  if (brapi.contextMenus)
-  brapi.contextMenus.create({
-    id: "read-selection",
-    title: brapi.i18n.getMessage("context_read_selection"),
-    contexts: ["selection"]
-  },
-  function() {
-    if (brapi.runtime.lastError) console.error(brapi.runtime.lastError)
-    else console.info("Installed context menus")
-  })
+  if (brapi.contextMenus) {
+    brapi.contextMenus.create({
+      id: "read-selection",
+      title: brapi.i18n.getMessage("context_read_selection"),
+      contexts: ["selection"]
+    },
+    function() {
+      if (brapi.runtime.lastError) console.error(brapi.runtime.lastError)
+      else console.info("Installed selection context menu")
+    })
+    
+    brapi.contextMenus.create({
+      id: "read-clipboard",
+      title: brapi.i18n.getMessage("context_read_clipboard"),
+      contexts: ["page", "frame", "link", "editable", "image", "video", "audio"]
+    },
+    function() {
+      if (brapi.runtime.lastError) console.error(brapi.runtime.lastError)
+      else console.info("Installed clipboard context menu")
+    })
+  }
 }
 
 
@@ -76,7 +88,7 @@ function installContextMenus() {
  */
 if (brapi.contextMenus)
 brapi.contextMenus.onClicked.addListener(function(info, tab) {
-  if (info.menuItemId == "read-selection")
+  if (info.menuItemId == "read-selection") {
     Promise.resolve()
       .then(function() {
         if (tab && tab.id != -1) return detectTabLanguage(tab.id)
@@ -86,6 +98,11 @@ brapi.contextMenus.onClicked.addListener(function(info, tab) {
         return playText(info.selectionText, {lang: lang})
       })
       .catch(handleHeadlessError)
+  }
+  else if (info.menuItemId == "read-clipboard") {
+    playClipboard()
+      .catch(handleHeadlessError)
+  }
 })
 
 
@@ -99,8 +116,8 @@ brapi.commands.onCommand.addListener(function(command) {
       .then(function(stateInfo) {
         switch (stateInfo.state) {
           case "PLAYING": return pause()
-          case "PAUSED": return playClipboard()//resume()
-          case "STOPPED": return playClipboard()//playTab()
+          case "PAUSED": return resume()
+          case "STOPPED": return playTab()
         }
       })
       .catch(handleHeadlessError)
@@ -113,8 +130,8 @@ brapi.commands.onCommand.addListener(function(command) {
     forward()
       .catch(handleHeadlessError)
   }
-  else if (command == "rewind") {
-    rewind()
+  else if (command == "playClipboard") {
+    playClipboard()
       .catch(handleHeadlessError)
   }
 })

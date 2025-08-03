@@ -60,6 +60,7 @@ async function init() {
   $("#btnPlay").click(onPlay);
   $("#btnPause").click(onPause);
   $("#btnStop").click(onStop);
+  $("#btnClipboard").click(onClipboard);
   $("#btnSettings").click(onSettings);
   $("#btnForward").click(onForward);
   $("#btnRewind").click(onRewind);
@@ -168,6 +169,7 @@ async function updateButtons() {
   $("#btnPlay").toggle(state == "PAUSED" || state == "STOPPED");
   $("#btnPause").toggle(state == "PLAYING");
   $("#btnStop").toggle(state == "PAUSED" || state == "PLAYING" || state == "LOADING");
+  $("#btnClipboard").toggle(state == "PLAYING" || state == "STOPPED" || state == "PAUSED");
   $("#btnForward, #btnRewind").toggle(state == "PLAYING" || state == "PAUSED");
 
   if (showHighlighting && (state == "LOADING" || state == "PAUSED" || state == "PLAYING") && speech) {
@@ -286,6 +288,13 @@ function onPause() {
 
 function onStop() {
   bgPageInvoke("stop")
+    .then(updateButtons)
+    .catch(handleError)
+}
+
+function onClipboard() {
+  $("#status").hide();
+  bgPageInvoke("playClipboard")
     .then(updateButtons)
     .catch(handleError)
 }

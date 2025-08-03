@@ -140,16 +140,42 @@ if (queryString.has("opener")) {
 
 document.addEventListener("DOMContentLoaded", initialize)
 
-function playClipboard(){
-  let t = document.createElement("input");
-  document.body.appendChild(t);
-  t.focus();
-  document.execCommand("paste");
-  let clipboardText = t.value; //this is your clipboard data
-  console.log(clipboardText)
-  document.body.removeChild(t);
-  stop();
-  playText(clipboardText);
+async function playClipboard(){
+  try {
+    // Use modern Clipboard API
+    const clipboardText = await navigator.clipboard.readText();
+    console.log("Reading clipboard:", clipboardText.substring(0, 100) + (clipboardText.length > 100 ? "..." : ""));
+    
+    if (!clipboardText.trim()) {
+      console.warn("Clipboard is empty");
+      return;
+    }
+    
+    stop();
+    playText(clipboardText);
+  } catch (err) {
+    console.error("Failed to read clipboard:", err);
+    
+    // Fallback to deprecated method for older browsers
+    try {
+      let t = document.createElement("input");
+      document.body.appendChild(t);
+      t.focus();
+      document.execCommand("paste");
+      let clipboardText = t.value;
+      console.log("Fallback clipboard read:", clipboardText.substring(0, 100) + (clipboardText.length > 100 ? "..." : ""));
+      document.body.removeChild(t);
+      
+      if (clipboardText.trim()) {
+        stop();
+        playText(clipboardText);
+      } else {
+        console.warn("Clipboard is empty (fallback)");
+      }
+    } catch (fallbackErr) {
+      console.error("Fallback clipboard read also failed:", fallbackErr);
+    }
+  }
 }
 
 async function initialize() {

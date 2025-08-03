@@ -81,9 +81,9 @@
       "suggested_key": {"default": "Alt+Period"},
       "description": "forward"
     },
-    "rewind": {
-      "suggested_key": {"default": "Alt+Comma"},
-      "description": "rewind"
+    "playClipboard": {
+      "suggested_key": {"default": "Alt+C"},
+      "description": "__MSG_command_play_clipboard__"
     }
   }
 }

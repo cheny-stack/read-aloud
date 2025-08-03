@@ -81,7 +81,7 @@ Read Aloud allows you to select from a variety of text-to-speech voices, includi
 ```yaml
 ALT/Option + P           : Play/Pause
 ALT/Option + O           : Stop
-ALT/Option + Comma       : Rewind
+ALT/Option + C           : Read Clipboard
 ALT/Option + Period      : Forward
 ```
 
