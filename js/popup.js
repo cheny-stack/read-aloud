@@ -131,7 +131,7 @@ function handleError(err) {
       try {
         playerCheckIn$.pipe(rxjs.take(1)).subscribe(() => $("#btnPlay").click())
         const tab = await brapi.tabs.create({
-          url: "player.html?opener=popup&autoclose=long",
+          url: "player.html?opener=popup",
           index: 0,
           active: false,
         })

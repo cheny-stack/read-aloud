@@ -438,7 +438,7 @@
         try {
           playerCheckIn$.pipe(rxjs.take(1)).subscribe(() => $("#test-voice").click())
           const tab = await brapi.tabs.create({
-            url: "player.html?opener=options&autoclose=long",
+            url: "player.html?opener=options",
             index: 0,
             active: false,
           })

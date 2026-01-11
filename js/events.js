@@ -466,7 +466,7 @@ function createPlayerFrame() {
 
 async function createPlayerTab() {
   const tab = await brapi.tabs.create({
-    url: brapi.runtime.getURL("player.html?autoclose"),
+    url: brapi.runtime.getURL("player.html"),
     index: 0,
     active: false,
   })

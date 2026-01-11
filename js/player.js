@@ -97,18 +97,6 @@ window.addEventListener("message", event => {
 
 const idleSubject = new rxjs.BehaviorSubject(true)
 
-if (queryString.has("autoclose"))
-  rxjs.combineLatest(idleSubject, piperSubject.pipe(rxjs.startWith(null)))
-    .pipe(
-      rxjs.switchMap(([isIdle, piper]) => {
-        if (isIdle) return rxjs.timer(queryString.get("autoclose") == "long" || piper ? 15*60*1000 : 5*60*1000)
-        else return rxjs.EMPTY
-      })
-    )
-    .subscribe(closePlayer)
-
-
-
 var messageHandlers = {
   playClipboard: playClipboard,
   playText: playText,
