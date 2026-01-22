@@ -1,9 +1,16 @@
 
 function Speech(texts, options) {
+  const hasAudioUrls = Array.isArray(options.audioUrls) && options.audioUrls.length > 0
   options.rate = (options.rate || 1) * (isGoogleNative(options.voice) ? 0.9 : 1);
 
-  for (var i=0; i<texts.length; i++) if (/[\w)]$/.test(texts[i])) texts[i] += '.';
-  if (texts.length) texts = getChunks(texts.join("\n\n"));
+  if (!hasAudioUrls) {
+    for (var i=0; i<texts.length; i++) if (/[\w)]$/.test(texts[i])) texts[i] += '.';
+    if (texts.length) texts = getChunks(texts.join("\n\n"));
+  }
+
+  if (!hasAudioUrls && typeof window != "undefined" && typeof window.onReadAloudSpeechInit == "function") {
+    window.onReadAloudSpeechInit({texts, options})
+  }
 
   var self = this;
   const engine = pickEngine()
@@ -242,6 +249,10 @@ function Speech(texts, options) {
 
 
   function makePlayback(text) {
+    if (hasAudioUrls) {
+      const url = options.audioUrls[playlist.getIndex()]
+      return playAudio(Promise.resolve(url), options, playbackState$)
+    }
     if (engine.stop != null) return makePlaybackLegacy(text)
     else return engine.speak(text, options, playbackState$)
   }

@@ -61,6 +61,7 @@ async function init() {
   $("#btnPause").click(onPause);
   $("#btnStop").click(onStop);
   $("#btnClipboard").click(onClipboard);
+  $("#btnRepeat").click(onRepeat);
   $("#btnSettings").click(onSettings);
   $("#btnForward").click(onForward);
   $("#btnRewind").click(onRewind);
@@ -69,6 +70,9 @@ async function init() {
   $("#decrease-window-size").click(changeWindowSize.bind(null, -1));
   $("#increase-window-size").click(changeWindowSize.bind(null, +1));
   $("#toggle-dark-mode").click(toggleDarkMode);
+
+  $("#btnClipboard").attr("title", brapi.i18n.getMessage("context_read_clipboard"));
+  $("#btnRepeat").attr("title", brapi.i18n.getMessage("popup_repeat_last"));
 
   refreshSize();
   checkAnnouncements();
@@ -164,12 +168,15 @@ async function updateButtons() {
   if (playbackErr) handleError(playbackErr)
   piperInitializingSubject.next(!!speech?.isPiper && state == "LOADING")
 
+  const hasLastPlayback = !!stateInfo.hasLastPlayback
+
   $("#imgLoading").toggle(state == "LOADING");
   $("#btnSettings").toggle(state == "STOPPED");
   $("#btnPlay").toggle(state == "PAUSED" || state == "STOPPED");
   $("#btnPause").toggle(state == "PLAYING");
   $("#btnStop").toggle(state == "PAUSED" || state == "PLAYING" || state == "LOADING");
   $("#btnClipboard").toggle(state == "PLAYING" || state == "STOPPED" || state == "PAUSED");
+  $("#btnRepeat").toggle(hasLastPlayback && (state == "PLAYING" || state == "STOPPED" || state == "PAUSED"));
   $("#btnForward, #btnRewind").toggle(state == "PLAYING" || state == "PAUSED");
 
   if (showHighlighting && (state == "LOADING" || state == "PAUSED" || state == "PLAYING") && speech) {
@@ -295,6 +302,13 @@ function onStop() {
 function onClipboard() {
   $("#status").hide();
   bgPageInvoke("playClipboard")
+    .then(updateButtons)
+    .catch(handleError)
+}
+
+function onRepeat() {
+  $("#status").hide();
+  bgPageInvoke("repeatLast")
     .then(updateButtons)
     .catch(handleError)
 }

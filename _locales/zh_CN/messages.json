@@ -119,6 +119,12 @@
   "command_play_clipboard": {
     "message": "朗读剪切板内容"
   },
+  "popup_repeat_last": {
+    "message": "重复播放上次音频"
+  },
+  "error_no_last_playback": {
+    "message": "暂无可重复播放的内容"
+  },
   "error_no_text": {
     "message": "没有找到任何文字阅读"
   },

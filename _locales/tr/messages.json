@@ -113,6 +113,15 @@
   "context_read_selection": {
     "message": "Seçilen metni yüksek sesle oku"
   },
+  "context_read_clipboard": {
+    "message": "Read aloud clipboard content"
+  },
+  "popup_repeat_last": {
+    "message": "Repeat last audio"
+  },
+  "error_no_last_playback": {
+    "message": "Nothing to repeat yet"
+  },
   "error_no_text": {
     "message": "Okunacak metin bulamadım"
   },

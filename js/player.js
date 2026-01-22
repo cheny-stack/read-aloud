@@ -4,6 +4,10 @@ var queryString = new URLSearchParams(location.search)
 var activeDoc;
 var playbackError = null;
 var lastUrlPromise = Promise.resolve(null)
+var lastPlayback = null
+var lastAudioPlayback = null
+var audioCaptureSessionId = 0
+var audioCaptureEnabled = false
 
 
 const piperSubject = new rxjs.Subject()
@@ -101,6 +105,7 @@ var messageHandlers = {
   playClipboard: playClipboard,
   playText: playText,
   playTab: playTab,
+  repeatLast: repeatLast,
   stop: stop,
   pause: pause,
   resume: resume,
@@ -127,6 +132,29 @@ if (queryString.has("opener")) {
 }
 
 document.addEventListener("DOMContentLoaded", initialize)
+
+if (typeof window != "undefined") {
+  window.onReadAloudSpeechInit = function({texts, options}) {
+    if (!audioCaptureEnabled || !lastAudioPlayback || lastAudioPlayback.id != audioCaptureSessionId) return
+    lastAudioPlayback.texts = lastAudioPlayback.texts.concat(texts)
+    if (!lastAudioPlayback.options) lastAudioPlayback.options = options
+  }
+  window.onReadAloudAudioUrl = function(url, options) {
+    if (!audioCaptureEnabled || !lastAudioPlayback || lastAudioPlayback.id != audioCaptureSessionId) return
+    lastAudioPlayback.urls.push(url)
+    if (!lastAudioPlayback.options) lastAudioPlayback.options = options
+  }
+}
+
+function startAudioCapture() {
+  audioCaptureSessionId++
+  lastAudioPlayback = {id: audioCaptureSessionId, texts: [], urls: [], options: null}
+  audioCaptureEnabled = true
+}
+
+function hasCachedAudioPlayback() {
+  return lastAudioPlayback && lastAudioPlayback.urls && lastAudioPlayback.urls.length > 0
+}
 
 async function playClipboard(){
   try {
@@ -188,6 +216,8 @@ async function initialize() {
 
 function playText(text, opts) {
   opts = opts || {}
+  lastPlayback = {type: "text", text, opts}
+  startAudioCapture()
   playbackError = null
   if (!activeDoc) {
     openDoc(new SimpleSource(text.split(/(?:\r?\n){2,}/), {lang: opts.lang}), function(err) {
@@ -206,6 +236,8 @@ function playText(text, opts) {
 }
 
 function playTab() {
+  lastPlayback = {type: "tab"}
+  startAudioCapture()
   playbackError = null
   if (!activeDoc) {
     openDoc(new TabSource(), function(err) {
@@ -241,6 +273,44 @@ function resume() {
   else return Promise.resolve()
 }
 
+function repeatLast() {
+  if (!hasCachedAudioPlayback()) throw new Error(JSON.stringify({code: "error_no_last_playback"}))
+  stop()
+  return playCachedAudio(lastAudioPlayback)
+}
+
+function playCachedAudio(cached) {
+  const urls = cached.urls.slice()
+  const texts = cached.texts.slice(0, urls.length)
+  const options = cached.options || {}
+  audioCaptureEnabled = false
+  playbackError = null
+  if (!activeDoc) {
+    const source = new SimpleSource(texts, {lang: options.lang})
+    source.getSpeechOptions = function() {
+      return Promise.resolve({
+        audioUrls: urls,
+        rate: options.rate,
+        pitch: options.pitch,
+        volume: options.volume,
+        lang: options.lang,
+      })
+    }
+    openDoc(source, function(err) {
+      if (err) playbackError = err
+    })
+  }
+  const doc = activeDoc
+  return activeDoc.play()
+    .catch(function(err) {
+      if (doc == activeDoc) {
+        handleError(err);
+        closeDoc();
+      }
+      throw err;
+    })
+}
+
 function getPlaybackState() {
   console.log("getPlaybackState")
   if (activeDoc) {
@@ -249,6 +319,7 @@ function getPlaybackState() {
         return {
           state: results[0],
           speechInfo: results[1] && results[1].getInfo(),
+          hasLastPlayback: hasCachedAudioPlayback(),
           playbackError: errorToJson(playbackError),
         }
       })
@@ -259,6 +330,7 @@ function getPlaybackState() {
   else {
     return {
       state: "STOPPED",
+      hasLastPlayback: hasCachedAudioPlayback(),
       playbackError: errorToJson(playbackError),
     }
   }
@@ -359,6 +431,9 @@ function playAudioOffscreen(urlPromise, options, playbackState$) {
         rxjs.scan((playback$, state) => {
           if (state == "resumed") {
             return rxjs.defer(async () => {
+              if (typeof window != "undefined" && typeof window.onReadAloudAudioUrl == "function") {
+                window.onReadAloudAudioUrl(url, options)
+              }
               if (!playback$) {
                 const result = await sendToOffscreen({method: "play", args: [url, options]})
                 if (result != true) throw "Offscreen doc not present"

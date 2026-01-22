@@ -787,6 +787,9 @@ function playAudioHere(urlPromise, options, playbackState$) {
   return rxjs.from(urlPromise).pipe(
     rxjs.exhaustMap(url =>
       new rxjs.Observable(observer => {
+        if (typeof window != "undefined" && typeof window.onReadAloudAudioUrl == "function") {
+          window.onReadAloudAudioUrl(url, options)
+        }
         audio.defaultPlaybackRate = (options.rate || 1) * (options.rateAdjust || 1)
         audio.volume = options.volume || 1
         audio.oncanplay = () => observer.next()

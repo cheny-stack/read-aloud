@@ -122,8 +122,14 @@
   "context_read_clipboard": {
     "message": "Read aloud clipboard content"
   },
+  "popup_repeat_last": {
+    "message": "Repeat last audio"
+  },
   "command_play_clipboard": {
     "message": "Read clipboard content"
+  },
+  "error_no_last_playback": {
+    "message": "Nothing to repeat yet"
   },
   "error_no_text": {
     "message": "Didn't find any text to read, try selecting the text you want to read first"

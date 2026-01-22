@@ -321,6 +321,12 @@ function Doc(source, onEnd) {
       volume: settings.volume || defaults.volume,
       lang: config.langMap[lang] || lang || 'en-US',
     }
+    const speechOptions = source.getSpeechOptions ? await source.getSpeechOptions() : null
+    if (speechOptions && speechOptions.audioUrls) {
+      options = Object.assign({}, options, speechOptions)
+      if (!options.voice) options.voice = {voiceName: "Cached Audio"}
+      return new Speech(texts, options)
+    }
     const voice = await getSpeechVoice(settings.voiceName, options.lang)
     if (!voice) throw new Error(JSON.stringify({code: "error_no_voice", lang: options.lang}));
     options.voice = voice;

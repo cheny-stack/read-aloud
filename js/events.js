@@ -13,6 +13,7 @@ var handlers = {
   playTab: playTab,
   reloadAndPlayTab: reloadAndPlayTab,
   playClipboard: playClipboard,
+  repeatLast: repeatLast,
   stop: stop,
   pause: pause,
   resume: resume,
@@ -138,6 +139,12 @@ brapi.commands.onCommand.addListener(function(command) {
 
 async function playClipboard(){
   await sendToPlayer({method: "playClipboard"})
+}
+
+async function repeatLast() {
+  const hasPlayer = await stop().then(res => res == true, err => false)
+  if (!hasPlayer) await injectPlayer(await getActiveTab())
+  await sendToPlayer({method: "repeatLast"})
 }
 
 /**

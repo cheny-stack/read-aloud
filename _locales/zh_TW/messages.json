@@ -113,6 +113,15 @@
   "context_read_selection": {
     "message": "朗讀所選文字"
   },
+  "context_read_clipboard": {
+    "message": "Read aloud clipboard content"
+  },
+  "popup_repeat_last": {
+    "message": "重複播放上次音訊"
+  },
+  "error_no_last_playback": {
+    "message": "目前沒有可重複播放的內容"
+  },
   "error_no_text": {
     "message": "沒有找到任何文字閱讀"
   },
