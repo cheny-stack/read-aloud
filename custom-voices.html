@@ -201,6 +201,70 @@
           </div>
         </div>
       </div>
+
+      <div class="col-lg-6">
+        <div class="card border-primary doubao">
+          <div class="card-header card-header-dark">
+            豆包语音合成 (V3 HTTP 流式)
+            <div class="subtext">Configure Volcengine app ID, access key, and resource ID</div>
+          </div>
+          <div class="card-body view-new">
+            <div class="form-group">
+              <button type="button" class="btn btn-outline-primary btn-add">Add</button>
+            </div>
+          </div>
+          <div class="card-body view-exist">
+            <div class="form-group">
+              <div class="text-muted">App ID</div>
+              <div class="app-id"></div>
+            </div>
+            <div class="form-group">
+              <div class="text-muted">Access Key</div>
+              <div class="access-key"></div>
+            </div>
+            <div class="form-group">
+              <div class="text-muted">Resource ID</div>
+              <div class="resource-id"></div>
+            </div>
+            <div class="form-group">
+              <div class="text-muted">Voice List</div>
+              <div class="voice-list"></div>
+            </div>
+            <div class="form-group">
+              <button type="button" class="btn btn-outline-primary btn-edit">Edit</button>
+              <button type="button" class="btn btn-outline-danger btn-delete">Delete</button>
+            </div>
+          </div>
+          <div class="card-body view-edit">
+            <form>
+              <div class="form-group">
+                <label>App ID</label>
+                <input type="text" class="form-control txt-app-id">
+              </div>
+              <div class="form-group">
+                <label>Access Key</label>
+                <input type="password" class="form-control txt-access-key">
+              </div>
+              <div class="form-group">
+                <label>Resource ID</label>
+                <input type="text" class="form-control txt-resource-id">
+              </div>
+              <div class="form-group">
+                <label>Voice List</label>
+                <textarea class="form-control txt-voice-list" rows="6"></textarea>
+              </div>
+              <div class="form-group">
+                <img class="status progress" src="img/loading.gif">
+                <div class="status error alert alert-danger"></div>
+              </div>
+              <div class="form-group">
+                <button type="button" class="btn btn-primary btn-save">Save</button>
+                <button type="button" class="btn btn-light btn-cancel">Cancel</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div>

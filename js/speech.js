@@ -29,6 +29,7 @@ function Speech(texts, options) {
     if (isPiperVoice(options.voice)) return piperTtsEngine;
     if (isAzure(options.voice)) return azureTtsEngine;
     if (isOpenai(options.voice)) return openaiTtsEngine;
+    if (isDoubao(options.voice)) return doubaoTtsEngine;
     if (isUseMyPhone(options.voice)) return phoneTtsEngine;
     if (isGoogleTranslate(options.voice) && !/\s(Hebrew|Telugu)$/.test(options.voice.voiceName)) {
       return googleTranslateTtsEngine
@@ -53,6 +54,7 @@ function Speech(texts, options) {
     }
     else {
       if (isGoogleTranslate(options.voice)) return new CharBreaker(200, punctuator).breakText(text);
+      else if (isDoubao(options.voice)) return new CharBreaker(300, punctuator, 200).breakText(text);
       else if (isPiperVoice(options.voice)) return [text];
       else return new CharBreaker(750, punctuator, 200).breakText(text);
     }

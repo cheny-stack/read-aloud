@@ -1,7 +1,7 @@
 
-$(function() {
+$(function () {
   getSettings(["awsCreds", "gcpCreds", "ibmCreds", "azureCreds"])
-    .then(function(items) {
+    .then(function (items) {
       if (items.awsCreds) {
         $("#aws-access-key-id").val(obfuscate(items.awsCreds.accessKeyId));
         $("#aws-secret-access-key").val(obfuscate(items.awsCreds.secretAccessKey));
@@ -27,8 +27,8 @@ $(function() {
 })
 
 function obfuscate(key) {
-  return key.replace(/./g, function(m, i) {
-    return i < key.length-5 ? "*" : m;
+  return key.replace(/./g, function (m, i) {
+    return i < key.length - 5 ? "*" : m;
   })
 }
 
@@ -40,21 +40,21 @@ function awsSave() {
   if (accessKeyId && secretAccessKey) {
     $("#aws-progress").show();
     testAws(accessKeyId, secretAccessKey)
-      .then(function() {
+      .then(function () {
         $("#aws-progress").hide();
-        updateSettings({awsCreds: {accessKeyId: accessKeyId, secretAccessKey: secretAccessKey}});
+        updateSettings({ awsCreds: { accessKeyId: accessKeyId, secretAccessKey: secretAccessKey } });
         $("#aws-success").text("Amazon Polly voices are enabled.").show();
         $("#aws-access-key-id").val(obfuscate(accessKeyId));
         $("#aws-secret-access-key").val(obfuscate(secretAccessKey));
       },
-      function(err) {
-        $("#aws-progress").hide();
-        $("#aws-error").text("Test failed: " + err.message).show();
-      })
+        function (err) {
+          $("#aws-progress").hide();
+          $("#aws-error").text("Test failed: " + err.message).show();
+        })
   }
   else if (!accessKeyId && !secretAccessKey) {
     clearSettings(["awsCreds"])
-      .then(function() {
+      .then(function () {
         $("#aws-success").text("Amazon Polly voices are disabled.").show();
       })
   }
@@ -64,12 +64,12 @@ function awsSave() {
 }
 
 function testAws(accessKeyId, secretAccessKey) {
-      var polly = new AWS.Polly({
-        region: "us-east-1",
-        accessKeyId: accessKeyId,
-        secretAccessKey: secretAccessKey
-      })
-      return polly.describeVoices().promise();
+  var polly = new AWS.Polly({
+    region: "us-east-1",
+    accessKeyId: accessKeyId,
+    secretAccessKey: secretAccessKey
+  })
+  return polly.describeVoices().promise();
 }
 
 
@@ -80,9 +80,9 @@ function gcpSave() {
   if (apiKey) {
     $("#gcp-progress").show();
     testGcp(apiKey)
-      .then(function() {
+      .then(function () {
         $("#gcp-progress").hide();
-        updateSettings({gcpCreds: {apiKey: apiKey, enableStudio: enableStudio}});
+        updateSettings({ gcpCreds: { apiKey: apiKey, enableStudio: enableStudio } });
         if (enableStudio) {
           $("#gcp-success").text("Google Wavenet & Studio voices are enabled.").show();
         } else {
@@ -90,21 +90,21 @@ function gcpSave() {
         }
         $("#gcp-api-key").val(obfuscate(apiKey));
       },
-      function(err) {
-        $("#gcp-progress").hide();
-        $("#gcp-error").text("Test failed: " + err.message).show();
-      })
+        function (err) {
+          $("#gcp-progress").hide();
+          $("#gcp-error").text("Test failed: " + err.message).show();
+        })
   }
   else {
     clearSettings(["gcpCreds"])
-      .then(function() {
+      .then(function () {
         $("#gcp-success").text("Google Wavenet voices are disabled.").show();
       })
   }
 }
 
 function testGcp(apiKey) {
-      return ajaxGet("https://texttospeech.googleapis.com/v1beta1/voices?key=" + apiKey);
+  return ajaxGet("https://texttospeech.googleapis.com/v1beta1/voices?key=" + apiKey);
 }
 
 
@@ -115,21 +115,21 @@ function ibmSave() {
   if (apiKey && url) {
     $("#ibm-progress").show();
     testIbm(apiKey, url)
-      .then(function() {
+      .then(function () {
         $("#ibm-progress").hide();
-        updateSettings({ibmCreds: {apiKey: apiKey, url: url}});
+        updateSettings({ ibmCreds: { apiKey: apiKey, url: url } });
         $("#ibm-success").text("IBM Watson voices are enabled.").show();
         $("#ibm-api-key").val(obfuscate(apiKey));
         $("#ibm-url").val(obfuscate(url));
       },
-      function(err) {
-        $("#ibm-progress").hide();
-        $("#ibm-error").text("Test failed: " + err.message).show();
-      })
+        function (err) {
+          $("#ibm-progress").hide();
+          $("#ibm-error").text("Test failed: " + err.message).show();
+        })
   }
   else if (!apiKey && !url) {
     clearSettings(["ibmCreds"])
-      .then(function() {
+      .then(function () {
         $("#ibm-success").text("IBM Watson voices are disabled.").show();
       })
   }
@@ -139,11 +139,11 @@ function ibmSave() {
 }
 
 function testIbm(apiKey, url) {
-  return brapi.permissions.request({origins: [url + "/*"]})
-    .then(function(granted) {
+  return brapi.permissions.request({ origins: [url + "/*"] })
+    .then(function (granted) {
       if (!granted) throw new Error("Permission not granted");
     })
-    .then(function() {
+    .then(function () {
       return ibmWatsonTtsEngine.fetchVoices(apiKey, url);
     })
 }
@@ -157,7 +157,7 @@ async function azureSave() {
     $("#azure-progress").show()
     try {
       await testAzure(region, key)
-      await updateSettings({azureCreds: {region, key}})
+      await updateSettings({ azureCreds: { region, key } })
       $("#azure-success").text("Azure voices are enabled.").show()
       $("#azure-key").val(obfuscate(key))
     }
@@ -183,11 +183,84 @@ async function testAzure(region, key) {
 
 
 
+//Doubao
+$(function () {
+  const creds$ = observeSetting("doubaoCreds")
+  const editMode$ = new rxjs.BehaviorSubject(false)
+  const status$ = new rxjs.BehaviorSubject({ type: "IDLE" })
+
+  rxjs.combineLatest(creds$, editMode$).subscribe(([creds, editMode]) => {
+    $(".doubao .view-new").toggle(creds == null && !editMode)
+    $(".doubao .view-exist").toggle(creds != null && !editMode)
+    $(".doubao .view-edit").toggle(editMode)
+  })
+
+  creds$.subscribe(creds => {
+    const appId = creds && creds.appId || ""
+    const accessKey = creds && creds.accessKey || ""
+    const resourceId = creds && creds.resourceId || ""
+    const voiceList = creds && creds.voiceList || doubaoTtsEngine.defaultVoiceList
+    $(".doubao .app-id").text(appId)
+    $(".doubao .access-key").text(accessKey && (accessKey.slice(0, 8) + "*****" + accessKey.slice(-4)))
+    $(".doubao .resource-id").text(resourceId)
+    $(".doubao .voice-list").text(voiceList.map(x => x.label || x.speaker).join(", "))
+    $(".doubao .txt-app-id").val(appId)
+    $(".doubao .txt-access-key").val(accessKey)
+    $(".doubao .txt-resource-id").val(resourceId)
+    $(".doubao .txt-voice-list").val(JSON.stringify(voiceList, null, 2))
+  })
+
+  status$.subscribe(status => {
+    $(".doubao .status.progress").toggle(status.type == "PROGRESS")
+    $(".doubao .status.error").toggle(status.type == "ERROR")
+      .text(status.type == "ERROR" ? status.error.message : "")
+  })
+
+  $(".doubao .btn-add").click(() => {
+    status$.next({ type: "IDLE" })
+    editMode$.next(true)
+  })
+  $(".doubao .btn-edit").click(() => {
+    status$.next({ type: "IDLE" })
+    editMode$.next(true)
+  })
+  $(".doubao .btn-delete").click(() => {
+    clearSettings(["doubaoCreds"])
+    editMode$.next(false)
+  })
+  $(".doubao .btn-save").click(async () => {
+    try {
+      const doubaoCreds = {
+        appId: $(".doubao .txt-app-id").val().trim(),
+        accessKey: $(".doubao .txt-access-key").val().trim(),
+        resourceId: $(".doubao .txt-resource-id").val().trim(),
+        voiceList: JSON.parse($(".doubao .txt-voice-list").val())
+      }
+      if (!doubaoCreds.appId || !doubaoCreds.accessKey || !doubaoCreds.resourceId) {
+        throw new Error("Missing App ID, Access Key, or Resource ID")
+      }
+      status$.next({ type: "PROGRESS" })
+      const granted = await brapi.permissions.request({ origins: ["https://openspeech.bytedance.com/*"] })
+      if (!granted) throw new Error("Permission not granted")
+      await doubaoTtsEngine.test(doubaoCreds)
+      await updateSettings({ doubaoCreds })
+      editMode$.next(false)
+      status$.next({ type: "IDLE" })
+    } catch (err) {
+      status$.next({ type: "ERROR", error: err })
+    }
+  })
+  $(".doubao .btn-cancel").click(() => {
+    editMode$.next(false)
+  })
+})
+
+
 //OpenAI
-$(function() {
+$(function () {
   const creds$ = observeSetting("openaiCreds")
   const editMode$ = new rxjs.BehaviorSubject(false)
-  const status$ = new rxjs.BehaviorSubject({type: "IDLE"})
+  const status$ = new rxjs.BehaviorSubject({ type: "IDLE" })
 
   rxjs.combineLatest(creds$, editMode$).subscribe(([creds, editMode]) => {
     $(".openai .view-new").toggle(creds == null && !editMode)
@@ -200,7 +273,7 @@ $(function() {
     const apiKey = creds && creds.apiKey || ""
     const voiceList = creds && creds.voiceList || openaiTtsEngine.defaultVoiceList
     $(".openai .endpoint-url").text(endpointUrl)
-    $(".openai .api-key").text(apiKey && (apiKey.slice(0,13) + "*****" + apiKey.slice(-5)))
+    $(".openai .api-key").text(apiKey && (apiKey.slice(0, 13) + "*****" + apiKey.slice(-5)))
     $(".openai .voice-list").text(voiceList.map(x => x.voice).join(", "))
     $(".openai .txt-endpoint-url").val(endpointUrl)
     $(".openai .txt-api-key").val(apiKey)
@@ -216,11 +289,11 @@ $(function() {
 
   //actions
   $(".openai .btn-add").click(() => {
-    status$.next({type: "IDLE"})
+    status$.next({ type: "IDLE" })
     editMode$.next(true)
   })
   $(".openai .btn-edit").click(() => {
-    status$.next({type: "IDLE"})
+    status$.next({ type: "IDLE" })
     editMode$.next(true)
   })
   $(".openai .btn-delete").click(() => {
@@ -234,13 +307,13 @@ $(function() {
         apiKey: $(".openai .txt-api-key").val(),
         voiceList: JSON.parse($(".openai .txt-voice-list").val())
       }
-      status$.next({type: "PROGRESS"})
+      status$.next({ type: "PROGRESS" })
       await openaiTtsEngine.test(openaiCreds)
-      await updateSettings({openaiCreds})
+      await updateSettings({ openaiCreds })
       editMode$.next(false)
-      status$.next({type: "IDLE"})
+      status$.next({ type: "IDLE" })
     } catch (err) {
-      status$.next({type: "ERROR", error: err})
+      status$.next({ type: "ERROR", error: err })
     }
   })
   $(".openai .btn-cancel").click(() => {

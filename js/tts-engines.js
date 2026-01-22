@@ -7,6 +7,7 @@ var googleWavenetTtsEngine = new GoogleWavenetTtsEngine();
 var ibmWatsonTtsEngine = new IbmWatsonTtsEngine();
 var phoneTtsEngine = new PhoneTtsEngine();
 var openaiTtsEngine = new OpenaiTtsEngine();
+var doubaoTtsEngine = new DoubaoTtsEngine();
 var azureTtsEngine = new AzureTtsEngine();
 const piperTtsEngine = new PiperTtsEngine()
 
@@ -1023,6 +1024,145 @@ function OpenaiTtsEngine() {
     })
     if (!res.ok) throw await res.json().then(x => x.error)
     return URL.createObjectURL(await res.blob())
+  }
+}
+
+
+function DoubaoTtsEngine() {
+  this.endpointUrl = "https://openspeech.bytedance.com/api/v3/tts/unidirectional"
+  const endpointUrl = this.endpointUrl
+  this.defaultVoiceList = [
+    {speaker: "zh_female_cancan_mars_bigtts", lang: "zh-CN"},
+  ]
+  var prefetchAudio
+  this.speak = function(utterance, options, playbackState$) {
+    const urlPromise = Promise.resolve()
+      .then(() => {
+        if (prefetchAudio && prefetchAudio[0] == utterance && prefetchAudio[1] == options) return prefetchAudio[2]
+        else return getAudioUrl(utterance, options.voice)
+      })
+    return playAudio(urlPromise, options, playbackState$)
+  }
+  this.prefetch = async function(utterance, options) {
+    try {
+      const url = await getAudioUrl(utterance, options.voice)
+      prefetchAudio = [utterance, options, url]
+    }
+    catch (err) {
+      console.error(err)
+    }
+  }
+  this.getVoices = async function() {
+    const doubaoCreds = await getSetting("doubaoCreds")
+    if (!doubaoCreds) return []
+    const voiceList = doubaoCreds.voiceList && doubaoCreds.voiceList.length ? doubaoCreds.voiceList : this.defaultVoiceList
+    return voiceList.map(item => ({
+      voiceName: "Doubao " + (item.label || item.speaker),
+      lang: item.lang || "zh-CN",
+      speaker: item.speaker
+    }))
+  }
+  this.test = async function(creds) {
+    const voiceList = creds.voiceList && creds.voiceList.length ? creds.voiceList : this.defaultVoiceList
+    const speaker = voiceList[0] && voiceList[0].speaker
+    if (!speaker) throw new Error("Missing speaker in voice list")
+    await requestAudio(creds, speaker, "你好")
+  }
+
+  async function getAudioUrl(text, voice) {
+    assert(text && voice)
+    const {doubaoCreds} = await getSettings(["doubaoCreds"])
+    const speaker = voice.speaker || voice.voiceName.slice("Doubao ".length)
+    const audioData = await requestAudio(doubaoCreds, speaker, text)
+    const blob = new Blob([audioData], {type: "audio/mpeg"})
+    return URL.createObjectURL(blob)
+  }
+
+  async function requestAudio(creds, speaker, text) {
+    assert(creds && creds.appId && creds.accessKey && creds.resourceId, "Missing Doubao credentials")
+    const headers = {
+      "X-Api-App-Id": creds.appId,
+      "X-Api-Access-Key": creds.accessKey,
+      "X-Api-Resource-Id": creds.resourceId,
+      "Content-Type": "application/json",
+      "Connection": "keep-alive",
+      "X-Api-Request-Id": (typeof crypto != "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Math.random()).slice(2)
+    }
+    const payload = {
+      user: {
+        uid: (await getUniqueClientId()) || "readaloud"
+      },
+      req_params: {
+        text,
+        speaker,
+        audio_params: {
+          format: "mp3",
+          sample_rate: 24000
+        }
+      }
+    }
+    const res = await fetch(endpointUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    })
+    if (!res.ok) throw new Error("Server return " + res.status)
+    const audioChunks = []
+    if (!res.body) {
+      const text = await res.text()
+      processLines(text, audioChunks, true)
+      return concatUint8Arrays(audioChunks)
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    let done = false
+    while (!done) {
+      const {value, done: streamDone} = await reader.read()
+      done = streamDone
+      if (value) {
+        buffer += decoder.decode(value, {stream: !done})
+        buffer = processLines(buffer, audioChunks)
+      }
+    }
+    if (buffer.trim()) {
+      processLines(buffer, audioChunks, true)
+    }
+    return concatUint8Arrays(audioChunks)
+  }
+
+  function processLines(buffer, audioChunks, flushAll) {
+    const lines = buffer.split(/\r?\n/)
+    const lastIndex = flushAll ? lines.length : lines.length - 1
+    for (let i = 0; i < lastIndex; i++) {
+      const line = lines[i].trim()
+      if (!line) continue
+      const data = JSON.parse(line)
+      if (data.code === 0 && data.data) {
+        audioChunks.push(base64ToUint8Array(data.data))
+      } else if (data.code && data.code !== 20000000) {
+        throw new Error(data.message || ("Doubao TTS error " + data.code))
+      }
+    }
+    return flushAll ? "" : lines[lines.length - 1]
+  }
+
+  function base64ToUint8Array(base64) {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    return bytes
+  }
+
+  function concatUint8Arrays(chunks) {
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+    const result = new Uint8Array(totalLength)
+    let offset = 0
+    for (const chunk of chunks) {
+      result.set(chunk, offset)
+      offset += chunk.length
+    }
+    return result
   }
 }
 
