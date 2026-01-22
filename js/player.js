@@ -216,6 +216,10 @@ async function initialize() {
 
 function playText(text, opts) {
   opts = opts || {}
+  if (hasCachedAudioPlayback() && lastPlayback && lastPlayback.type == "text" && lastPlayback.text == text) {
+    stop()
+    return playCachedAudio(lastAudioPlayback)
+  }
   lastPlayback = {type: "text", text, opts}
   startAudioCapture()
   playbackError = null
